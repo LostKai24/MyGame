@@ -11,33 +11,44 @@
     <header id="hud">
       <div class="hud-item"><span class="hud-label">Время</span><span id="hud-time">0.0 с</span></div>
       <div class="hud-item"><span class="hud-label">Скорость</span><span id="hud-speed">0.0</span></div>
-      <div class="hud-item"><span class="hud-label">ΔV</span><span id="hud-dv">0.0</span></div>
-      <div class="hud-item"><span class="hud-label">Импульсы</span><span id="hud-burns">3</span></div>
+      <div class="hud-item"><span class="hud-label">Высота</span><span id="hud-height">0</span></div>
+      <div class="hud-item"><span class="hud-label">Топливо</span><span id="hud-fuel">100%</span></div>
     </header>
 
     <div id="canvas-wrap">
       <canvas id="canvas"></canvas>
       <div id="message" class="hidden">
         <h2 id="message-title">Готов?</h2>
-        <p id="message-text">Настрой импульс и нажми «Пуск»</p>
+        <p id="message-text">Выбери двигатель и мягко сядь в жёлтую зону</p>
         <button id="restart-btn" type="button">Заново</button>
       </div>
     </div>
 
     <footer id="controls">
       <div class="control-row">
-        <label for="power">Сила</label>
-        <input id="power" type="range" min="0" max="100" value="50" step="1">
-        <span id="power-value">50</span>
+        <label for="engine">Двигатель</label>
+        <select id="engine">
+          <option value="light">Лёгкий (слабая тяга, экономичный)</option>
+          <option value="standard" selected>Стандартный</option>
+          <option value="heavy">Тяжёлый (мощный, жадный)</option>
+        </select>
       </div>
       <div class="control-row">
-        <label for="angle">Угол</label>
-        <input id="angle" type="range" min="0" max="359" value="45" step="1">
-        <span id="angle-value">45°</span>
+        <label for="throttle">Тяга</label>
+        <input id="throttle" type="range" min="0" max="100" value="60" step="1">
+        <span id="throttle-value">60%</span>
+      </div>
+      <div class="control-row">
+        <label>Поворот</label>
+        <div class="turn-row">
+          <button id="turn-left" type="button" class="turn-btn">←</button>
+          <span id="angle-value">90°</span>
+          <button id="turn-right" type="button" class="turn-btn">→</button>
+        </div>
       </div>
       <div class="button-row">
         <button id="start-btn" type="button">Старт</button>
-        <button id="burn-btn" type="button">Импульс</button>
+        <button id="burn-btn" type="button">Тяга</button>
         <button id="reset-btn" type="button">Сброс</button>
       </div>
     </footer>

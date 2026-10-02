@@ -6,13 +6,16 @@
 
   var hudTime = document.getElementById("hud-time");
   var hudSpeed = document.getElementById("hud-speed");
-  var hudDv = document.getElementById("hud-dv");
-  var hudBurns = document.getElementById("hud-burns");
+  var hudHeight = document.getElementById("hud-height");
+  var hudFuel = document.getElementById("hud-fuel");
 
-  var powerInput = document.getElementById("power");
-  var angleInput = document.getElementById("angle");
-  var powerValue = document.getElementById("power-value");
+  var engineSelect = document.getElementById("engine");
+  var throttleInput = document.getElementById("throttle");
+  var throttleValue = document.getElementById("throttle-value");
   var angleValue = document.getElementById("angle-value");
+
+  var turnLeftBtn = document.getElementById("turn-left");
+  var turnRightBtn = document.getElementById("turn-right");
 
   var startBtn = document.getElementById("start-btn");
   var burnBtn = document.getElementById("burn-btn");
@@ -23,32 +26,41 @@
   var messageTitle = document.getElementById("message-title");
   var messageText = document.getElementById("message-text");
 
-  // Мир игры задан в условных единицах (мировые координаты).
-  // Камера подбирает масштаб так, чтобы всё помещалось на экране.
+  // Двигатели: тяга (ускорение при 100% тяги) и расход топлива (в секунду при 100%).
+  var ENGINES = {
+    light:    { name: "Лёгкий",      thrust: 22,  fuelRate: 6  },
+    standard: { name: "Стандартный", thrust: 40,  fuelRate: 11 },
+    heavy:    { name: "Тяжёлый",     thrust: 70,  fuelRate: 20 }
+  };
+
+  // Мир в условных единицах. Луна в центре.
   var WORLD = {
     width: 1000,
     height: 700,
-    earth: { x: 160, y: 500, r: 70 },
-    moon: { x: 840, y: 180, r: 45 },
-    landing: { angleStart: Math.PI * 0.55, angleEnd: Math.PI * 1.15 }
+    moon: { x: 500, y: 380, r: 140 },
+    // Зона посадки — дуга сверху Луны.
+    landing: { angleStart: -Math.PI * 0.85, angleEnd: -Math.PI * 0.15 }
   };
 
-  // Физические параметры (упрощённые, не для реального полёта).
-  var G_EARTH = 4200;   // гравитационный параметр Земли
-  var G_MOON = 620;     // гравитационный параметр Луны
-  var START_OFFSET = 90; // старт на расстоянии от центра Земли
-  var START_SPEED = 55;  // начальная скорость по касательной
-  var BURN_STRENGTH = 1.15; // во сколько раз умножается ползунок силы
-  var MAX_BURNS = 3;
-  var MAX_TIME = 120; // сек игрового времени
+  var G_MOON = 900;        // гравитационный параметр Луны
+  var START_HEIGHT = 260;  // начальная высота над поверхностью
+  var START_VX = 28;       // начальная горизонтальная скорость (влево-вправо)
+  var MAX_TIME = 180;      // сек
+  var MAX_LANDING_SPEED = 22; // макс. скорость касания для мягкой посадки
+  var ROTATE_SPEED = 70;   // градусов в секунду
+  var FUEL_MAX = 100;
 
   var state = null;
   var running = false;
   var lastTimestamp = 0;
   var accumulatedTime = 0;
-  var STEP = 1 / 120; // фиксированный шаг физики
+  var STEP = 1 / 120;
 
-  // ---------- Работа с размерами canvas ----------
+  var thrustOn = false;
+  var turnLeft = false;
+  var turnRight = false;
+
+  // ---------- Размеры canvas ----------
   function fitCanvas() {
     var wrap = canvas.parentElement;
     var dpr = window.devicePixelRatio || 1;
@@ -66,7 +78,7 @@
     render();
   });
 
-  // ---------- Преобразование мировых координат в экранные ----------
+  // ---------- Мир -> экран ----------
   function getView() {
     var w = canvas.clientWidth;
     var h = canvas.clientHeight;
@@ -78,50 +90,64 @@
 
   function toScreen(x, y) {
     var v = getView();
-    return {
-      x: v.offsetX + x * v.scale,
-      y: v.offsetY + y * v.scale
-    };
+    return { x: v.offsetX + x * v.scale, y: v.offsetY + y * v.scale };
   }
 
-  // ---------- Инициализация состояния ----------
+  // ---------- Состояние ----------
   function resetState() {
-    // Аппарат стартует над Землёй (условно "сверху") с касательной скоростью.
-    var angle = -Math.PI / 2; // верх
-    var sx = WORLD.earth.x + Math.cos(angle) * (WORLD.earth.r + START_OFFSET);
-    var sy = WORLD.earth.y + Math.sin(angle) * (WORLD.earth.r + START_OFFSET);
-
-    // Касательная скорость — перпендикулярно радиусу, "вправо".
-    var vx = -Math.sin(angle) * START_SPEED;
-    var vy = Math.cos(angle) * START_SPEED;
+    // Старт: над Луной, чуть выше посадочной зоны.
+    var startAngle = -Math.PI / 2; // строго сверху
+    var startX = WORLD.moon.x + Math.cos(startAngle) * (WORLD.moon.r + START_HEIGHT);
+    var startY = WORLD.moon.y + Math.sin(startAngle) * (WORLD.moon.r + START_HEIGHT);
 
     state = {
-      ship: { x: sx, y: sy, vx: vx, vy: vy },
+      ship: {
+        x: startX,
+        y: startY,
+        vx: START_VX,
+        vy: 0,
+        angle: Math.PI / 2 // нос смотрит "вниз" к Луне (в экранных координатах +y — вниз)
+      },
       time: 0,
-      dv: 0,
-      burnsLeft: MAX_BURNS,
-      trail: [{ x: sx, y: sy }],
+      fuel: FUEL_MAX,
+      trail: [{ x: startX, y: startY }],
       status: "idle" // idle | flying | won | lost
     };
     running = false;
+    thrustOn = false;
+    turnLeft = false;
+    turnRight = false;
     accumulatedTime = 0;
     lastTimestamp = 0;
     updateHud();
     hideMessage();
     updateButtons();
+    updateAngleLabel();
   }
 
-  // ---------- HUD ----------
+  function updateAngleLabel() {
+    if (!state) return;
+    // Показываем угол в градусах так, чтобы 90° = нос вниз к Луне.
+    var deg = Math.round((state.ship.angle * 180 / Math.PI + 90 + 360) % 360);
+    angleValue.textContent = deg + "°";
+  }
+
   function speedOf(ship) {
     return Math.sqrt(ship.vx * ship.vx + ship.vy * ship.vy);
+  }
+
+  function heightAboveSurface(ship) {
+    var dx = ship.x - WORLD.moon.x;
+    var dy = ship.y - WORLD.moon.y;
+    return Math.max(0, Math.sqrt(dx * dx + dy * dy) - WORLD.moon.r);
   }
 
   function updateHud() {
     if (!state) return;
     hudTime.textContent = state.time.toFixed(1) + " с";
     hudSpeed.textContent = speedOf(state.ship).toFixed(1);
-    hudDv.textContent = state.dv.toFixed(1);
-    hudBurns.textContent = String(state.burnsLeft);
+    hudHeight.textContent = Math.round(heightAboveSurface(state.ship));
+    hudFuel.textContent = Math.round(state.fuel) + "%";
   }
 
   function updateButtons() {
@@ -129,14 +155,15 @@
     var finished = state && (state.status === "won" || state.status === "lost");
 
     startBtn.disabled = flying || finished;
-    burnBtn.disabled = !flying || state.burnsLeft <= 0;
+    burnBtn.disabled = !flying || state.fuel <= 0;
     resetBtn.disabled = false;
 
-    powerInput.disabled = finished;
-    angleInput.disabled = finished;
+    engineSelect.disabled = flying || finished;
+    throttleInput.disabled = finished;
+    turnLeftBtn.disabled = !flying;
+    turnRightBtn.disabled = !flying;
   }
 
-  // ---------- Сообщения ----------
   function showMessage(title, text) {
     messageTitle.textContent = title;
     messageText.textContent = text;
@@ -148,48 +175,52 @@
   }
 
   // ---------- Физика ----------
-  function accelAt(x, y) {
-    // Притяжение к Земле
-    var dxE = WORLD.earth.x - x;
-    var dyE = WORLD.earth.y - y;
-    var dE2 = dxE * dxE + dyE * dyE;
-    var dE = Math.sqrt(dE2) || 1;
-    var aE = G_EARTH / dE2;
-    var axE = aE * (dxE / dE);
-    var ayE = aE * (dyE / dE);
-
-    // Притяжение к Луне
-    var dxM = WORLD.moon.x - x;
-    var dyM = WORLD.moon.y - y;
-    var dM2 = dxM * dxM + dyM * dyM;
-    var dM = Math.sqrt(dM2) || 1;
-    var aM = G_MOON / dM2;
-    var axM = aM * (dxM / dM);
-    var ayM = aM * (dyM / dM);
-
-    return { ax: axE + axM, ay: ayE + ayM };
+  function gravityAt(x, y) {
+    var dx = WORLD.moon.x - x;
+    var dy = WORLD.moon.y - y;
+    var d2 = dx * dx + dy * dy;
+    var d = Math.sqrt(d2) || 1;
+    var a = G_MOON / d2;
+    return { ax: a * (dx / d), ay: a * (dy / d) };
   }
 
   function stepPhysics(dt) {
     var s = state.ship;
-    var a = accelAt(s.x, s.y);
 
-    // Метод Эйлера (полунеявный): сначала скорость, потом позиция.
-    s.vx += a.ax * dt;
-    s.vy += a.ay * dt;
+    // Поворот носа
+    if (turnLeft) s.angle -= ROTATE_SPEED * Math.PI / 180 * dt;
+    if (turnRight) s.angle += ROTATE_SPEED * Math.PI / 180 * dt;
+
+    // Гравитация Луны
+    var g = gravityAt(s.x, s.y);
+    s.vx += g.ax * dt;
+    s.vy += g.ay * dt;
+
+    // Тяга: пока кнопка нажата и есть топливо.
+    if (thrustOn && state.fuel > 0) {
+      var engine = ENGINES[engineSelect.value];
+      var throttle = parseFloat(throttleInput.value) / 100;
+      var accel = engine.thrust * throttle;
+      s.vx += Math.cos(s.angle) * accel * dt;
+      s.vy += Math.sin(s.angle) * accel * dt;
+
+      state.fuel -= engine.fuelRate * throttle * dt;
+      if (state.fuel < 0) state.fuel = 0;
+    }
+
+    // Интегрирование позиции
     s.x += s.vx * dt;
     s.y += s.vy * dt;
-
     state.time += dt;
 
-    // Траектория: добавляем точки не слишком часто.
+    // Траектория
     var trail = state.trail;
     var last = trail[trail.length - 1];
     var dx = s.x - last.x;
     var dy = s.y - last.y;
     if (dx * dx + dy * dy > 4) {
       trail.push({ x: s.x, y: s.y });
-      if (trail.length > 2000) trail.shift();
+      if (trail.length > 3000) trail.shift();
     }
 
     checkEndConditions();
@@ -204,51 +235,57 @@
   function checkEndConditions() {
     var s = state.ship;
 
-    // Столкновение с Землёй
-    if (distanceTo(s.x, s.y, WORLD.earth.x, WORLD.earth.y) <= WORLD.earth.r) {
-      endGame("lost", "Аппарат упал на Землю", "Попробуй другой угол или силу импульса.");
-      return;
-    }
-
-    // Касание Луны
+    // Касание поверхности Луны
     var dMoon = distanceTo(s.x, s.y, WORLD.moon.x, WORLD.moon.y);
     if (dMoon <= WORLD.moon.r) {
-      // Определяем, попал ли в зону посадки.
+      var speed = speedOf(s);
       var ang = Math.atan2(s.y - WORLD.moon.y, s.x - WORLD.moon.x);
       if (ang < 0) ang += Math.PI * 2;
+
+      // Приводим зону к [0..2π]
       var a0 = WORLD.landing.angleStart;
       var a1 = WORLD.landing.angleEnd;
-      var inZone = (ang >= a0 && ang <= a1);
+      if (a0 < 0) a0 += Math.PI * 2;
+      if (a1 < 0) a1 += Math.PI * 2;
 
-      if (inZone) {
-        endGame("won", "Успешная посадка!", "Ты попал в отмеченную зону. Время: " + state.time.toFixed(1) + " с, ΔV: " + state.dv.toFixed(1));
+      var inZone;
+      if (a0 <= a1) inZone = (ang >= a0 && ang <= a1);
+      else inZone = (ang >= a0 || ang <= a1);
+
+      if (!inZone) {
+        endGame("lost", "Мимо посадочной зоны", "Аппарат коснулся Луны вне жёлтой площадки.");
+      } else if (speed > MAX_LANDING_SPEED) {
+        endGame("lost", "Жёсткая посадка", "Скорость касания " + speed.toFixed(1) + " — слишком большая. Нужно мягче.");
       } else {
-        endGame("lost", "Жёсткая посадка мимо зоны", "Аппарат коснулся Луны вне посадочной площадки.");
+        endGame("won", "Мягкая посадка!", "Скорость касания: " + speed.toFixed(1) + ", время: " + state.time.toFixed(1) + " с");
       }
       return;
     }
 
     // Улёт за пределы мира
-    if (s.x < -400 || s.x > WORLD.width + 400 || s.y < -400 || s.y > WORLD.height + 400) {
-      endGame("lost", "Аппарат улетел в открытый космос", "Импульс оказался слишком сильным или направлен не туда.");
+    if (s.x < -600 || s.x > WORLD.width + 600 || s.y < -600 || s.y > WORLD.height + 600) {
+      endGame("lost", "Аппарат улетел в космос", "Слишком сильно разогнался или не туда направил тягу.");
       return;
     }
 
-    // Превышение времени
+    // Время
     if (state.time >= MAX_TIME) {
-      endGame("lost", "Время вышло", "Не удалось достичь Луны за отведённое время.");
+      endGame("lost", "Время вышло", "Не удалось совершить посадку за отведённое время.");
       return;
     }
 
-    // Кончились импульсы и аппарат больше не движется к Луне (упрощённо: если близко к Земле и медленно)
-    if (state.burnsLeft <= 0 && speedOf(s) < 5 && distanceTo(s.x, s.y, WORLD.earth.x, WORLD.earth.y) < 300) {
-      endGame("lost", "Топливо закончилось", "Аппарат остался на околоземной орбите.");
+    // Топливо кончилось, но аппарат ещё летит — тоже проигрыш, если скорость высокая и падает
+    if (state.fuel <= 0 && speedOf(s) > MAX_LANDING_SPEED) {
+      // Не заканчиваем сразу: дадим упасть. Упадёт — сработает проверка касания.
     }
   }
 
   function endGame(status, title, text) {
     state.status = status;
     running = false;
+    thrustOn = false;
+    turnLeft = false;
+    turnRight = false;
     updateButtons();
     updateHud();
     showMessage(title, text);
@@ -262,58 +299,54 @@
 
     ctx.clearRect(0, 0, w, h);
 
-    // Фон-космос
+    // Космос
     ctx.fillStyle = "#05060a";
     ctx.fillRect(0, 0, w, h);
-
     drawStars();
 
     if (!state) return;
 
-    // Земля
-    drawBody(WORLD.earth.x, WORLD.earth.y, WORLD.earth.r, "#2b6fd6", "#1a4a94", "Земля");
-
-    // Луна
-    drawBody(WORLD.moon.x, WORLD.moon.y, WORLD.moon.r, "#9aa4b8", "#6a7386", "Луна");
-
-    // Зона посадки
+    drawMoon();
     drawLandingZone();
-
-    // Траектория
     drawTrail();
-
-    // Аппарат
     drawShip();
   }
 
   function drawStars() {
-    // Простые "звёзды" по псевдослучайным координатам, без мерцания.
     ctx.fillStyle = "rgba(255,255,255,0.5)";
-    for (var i = 0; i < 60; i++) {
+    for (var i = 0; i < 90; i++) {
       var x = ((i * 137.5) % 1000) / 1000 * canvas.clientWidth;
       var y = ((i * 91.7) % 700) / 700 * canvas.clientHeight;
       ctx.fillRect(x, y, 1.5, 1.5);
     }
   }
 
-  function drawBody(wx, wy, wr, colorTop, colorBottom, label) {
-    var p = toScreen(wx, wy);
+  function drawMoon() {
+    var p = toScreen(WORLD.moon.x, WORLD.moon.y);
     var v = getView();
-    var r = wr * v.scale;
+    var r = WORLD.moon.r * v.scale;
 
     var grad = ctx.createRadialGradient(p.x - r * 0.3, p.y - r * 0.3, r * 0.2, p.x, p.y, r);
-    grad.addColorStop(0, colorTop);
-    grad.addColorStop(1, colorBottom);
+    grad.addColorStop(0, "#c9d2e2");
+    grad.addColorStop(1, "#6a7386");
 
     ctx.beginPath();
     ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
     ctx.fillStyle = grad;
     ctx.fill();
 
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.font = "12px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(label, p.x, p.y + r + 16);
+    // Кратеры (для вида)
+    ctx.fillStyle = "rgba(90, 100, 120, 0.55)";
+    drawCrater(p.x - r * 0.35, p.y + r * 0.25, r * 0.12);
+    drawCrater(p.x + r * 0.30, p.y + r * 0.45, r * 0.09);
+    drawCrater(p.x + r * 0.05, p.y - r * 0.30, r * 0.07);
+    drawCrater(p.x - r * 0.55, p.y - r * 0.10, r * 0.06);
+  }
+
+  function drawCrater(cx, cy, cr) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   function drawLandingZone() {
@@ -324,13 +357,12 @@
     ctx.beginPath();
     ctx.arc(p.x, p.y, r, WORLD.landing.angleStart, WORLD.landing.angleEnd);
     ctx.strokeStyle = "#ffd76a";
-    ctx.lineWidth = Math.max(3, r * 0.12);
+    ctx.lineWidth = Math.max(4, r * 0.10);
     ctx.stroke();
   }
 
   function drawTrail() {
     if (!state.trail || state.trail.length < 2) return;
-    var v = getView();
     ctx.beginPath();
     for (var i = 0; i < state.trail.length; i++) {
       var pt = state.trail[i];
@@ -338,7 +370,7 @@
       if (i === 0) ctx.moveTo(p.x, p.y);
       else ctx.lineTo(p.x, p.y);
     }
-    ctx.strokeStyle = "rgba(120, 200, 255, 0.75)";
+    ctx.strokeStyle = "rgba(120, 200, 255, 0.7)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
@@ -347,16 +379,13 @@
     var s = state.ship;
     var p = toScreen(s.x, s.y);
     var v = getView();
-
-    var size = Math.max(5, 8 * v.scale);
-
-    // Направление скорости — для ориентации треугольника.
-    var ang = Math.atan2(s.vy, s.vx);
+    var size = Math.max(6, 9 * v.scale);
 
     ctx.save();
     ctx.translate(p.x, p.y);
-    ctx.rotate(ang);
+    ctx.rotate(s.angle);
 
+    // Корпус — треугольник, нос по направлению angle.
     ctx.beginPath();
     ctx.moveTo(size * 1.6, 0);
     ctx.lineTo(-size, size * 0.9);
@@ -364,6 +393,24 @@
     ctx.closePath();
     ctx.fillStyle = "#ffffff";
     ctx.fill();
+
+    // Сопло и "пламя" при работающей тяге.
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.6, size * 0.5);
+    ctx.lineTo(-size * 0.6, -size * 0.5);
+    ctx.strokeStyle = "#9aa4b8";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    if (thrustOn && state.fuel > 0 && state.status === "flying") {
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.7, size * 0.4);
+      ctx.lineTo(-size * 1.9, 0);
+      ctx.lineTo(-size * 0.7, -size * 0.4);
+      ctx.closePath();
+      ctx.fillStyle = "#ff8c42";
+      ctx.fill();
+    }
 
     ctx.restore();
   }
@@ -374,7 +421,7 @@
     var dt = (timestamp - lastTimestamp) / 1000;
     lastTimestamp = timestamp;
 
-    if (dt > 0.1) dt = 0.1; // защита от больших пауз
+    if (dt > 0.1) dt = 0.1;
 
     if (running && state && state.status === "flying") {
       accumulatedTime += dt;
@@ -384,6 +431,7 @@
         if (!running || state.status !== "flying") break;
       }
       updateHud();
+      updateAngleLabel();
     }
 
     render();
@@ -392,9 +440,8 @@
 
   // ---------- Управление ----------
   function startFlight() {
-    if (!state || state.status === "flying") return;
-    if (state.status === "won" || state.status === "lost") return;
-
+    if (!state) return;
+    if (state.status === "flying" || state.status === "won" || state.status === "lost") return;
     state.status = "flying";
     running = true;
     lastTimestamp = 0;
@@ -403,87 +450,71 @@
     updateButtons();
   }
 
-  function applyBurn() {
-    if (!state || state.status !== "flying") return;
-    if (state.burnsLeft <= 0) return;
-
-    var power = parseFloat(powerInput.value);
-    var angleDeg = parseFloat(angleInput.value);
-    var angleRad = angleDeg * Math.PI / 180;
-
-    var dv = power * BURN_STRENGTH;
-
-    state.ship.vx += Math.cos(angleRad) * dv;
-    state.ship.vy += Math.sin(angleRad) * dv;
-
-    state.dv += dv;
-    state.burnsLeft -= 1;
-
-    updateHud();
-    updateButtons();
-  }
-
   function resetGame() {
     resetState();
     render();
   }
 
-  // ---------- Обработчики ----------
-  powerInput.addEventListener("input", function () {
-    powerValue.textContent = powerInput.value;
+  // ---------- События ----------
+  throttleInput.addEventListener("input", function () {
+    throttleValue.textContent = throttleInput.value + "%";
   });
 
-  angleInput.addEventListener("input", function () {
-    angleValue.textContent = angleInput.value + "°";
+  engineSelect.addEventListener("change", function () {
+    // Ничего не сбрасываем, просто меняется модель двигателя.
   });
+
+  // Кнопка «Тяга»: нажата — включена.
+  burnBtn.addEventListener("mousedown", function () { if (state && state.status === "flying" && state.fuel > 0) thrustOn = true; });
+  burnBtn.addEventListener("mouseup", function () { thrustOn = false; });
+  burnBtn.addEventListener("mouseleave", function () { thrustOn = false; });
+  burnBtn.addEventListener("touchstart", function (e) { e.preventDefault(); if (state && state.status === "flying" && state.fuel > 0) thrustOn = true; }, { passive: false });
+  burnBtn.addEventListener("touchend", function () { thrustOn = false; });
+
+  turnLeftBtn.addEventListener("mousedown", function () { turnLeft = true; });
+  turnLeftBtn.addEventListener("mouseup", function () { turnLeft = false; });
+  turnLeftBtn.addEventListener("mouseleave", function () { turnLeft = false; });
+  turnLeftBtn.addEventListener("touchstart", function (e) { e.preventDefault(); turnLeft = true; }, { passive: false });
+  turnLeftBtn.addEventListener("touchend", function () { turnLeft = false; });
+
+  turnRightBtn.addEventListener("mousedown", function () { turnRight = true; });
+  turnRightBtn.addEventListener("mouseup", function () { turnRight = false; });
+  turnRightBtn.addEventListener("mouseleave", function () { turnRight = false; });
+  turnRightBtn.addEventListener("touchstart", function (e) { e.preventDefault(); turnRight = true; }, { passive: false });
+  turnRightBtn.addEventListener("touchend", function () { turnRight = false; });
 
   startBtn.addEventListener("click", startFlight);
-  burnBtn.addEventListener("click", applyBurn);
   resetBtn.addEventListener("click", resetGame);
   restartBtn.addEventListener("click", resetGame);
 
-  // Клавиатура: стрелки меняют силу/угол, пробел — импульс, Enter — старт/сброс.
+  // Клавиатура
   document.addEventListener("keydown", function (e) {
-    if (e.target && e.target.tagName === "INPUT" && e.target.type !== "range") return;
-
-    var stepSmall = e.shiftKey ? 10 : 1;
-
-    if (e.key === "ArrowUp" || e.key === "ArrowRight") {
-      if (document.activeElement === angleInput) {
-        angleInput.value = String((parseInt(angleInput.value, 10) + stepSmall) % 360);
-        angleValue.textContent = angleInput.value + "°";
-      } else {
-        powerInput.value = String(Math.min(100, parseInt(powerInput.value, 10) + stepSmall));
-        powerValue.textContent = powerInput.value;
+    if (e.repeat) return;
+    if (state && state.status === "flying") {
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "ф") { turnLeft = true; e.preventDefault(); }
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "в") { turnRight = true; e.preventDefault(); }
+      if (e.key === " " || e.key === "ArrowUp" || e.key === "w" || e.key === "ц") {
+        if (state.fuel > 0) thrustOn = true;
+        e.preventDefault();
       }
-      e.preventDefault();
-    } else if (e.key === "ArrowDown" || e.key === "ArrowLeft") {
-      if (document.activeElement === angleInput) {
-        var a = parseInt(angleInput.value, 10) - stepSmall;
-        if (a < 0) a += 360;
-        angleInput.value = String(a);
-        angleValue.textContent = angleInput.value + "°";
-      } else {
-        powerInput.value = String(Math.max(0, parseInt(powerInput.value, 10) - stepSmall));
-        powerValue.textContent = powerInput.value;
-      }
-      e.preventDefault();
-    } else if (e.key === " ") {
-      applyBurn();
-      e.preventDefault();
-    } else if (e.key === "Enter") {
-      if (state && (state.status === "won" || state.status === "lost" || state.status === "idle")) {
-        if (state.status === "idle") startFlight();
-        else resetGame();
-      }
+    }
+    if (e.key === "Enter") {
+      if (state && state.status === "idle") startFlight();
+      else if (state && (state.status === "won" || state.status === "lost")) resetGame();
       e.preventDefault();
     }
+  });
+
+  document.addEventListener("keyup", function (e) {
+    if (e.key === "ArrowLeft" || e.key === "a" || e.key === "ф") turnLeft = false;
+    if (e.key === "ArrowRight" || e.key === "d" || e.key === "в") turnRight = false;
+    if (e.key === " " || e.key === "ArrowUp" || e.key === "w" || e.key === "ц") thrustOn = false;
   });
 
   // ---------- Старт ----------
   fitCanvas();
   resetState();
-  powerValue.textContent = powerInput.value;
-  angleValue.textContent = angleInput.value + "°";
+  throttleValue.textContent = throttleInput.value + "%";
+  updateAngleLabel();
   requestAnimationFrame(loop);
 })();
