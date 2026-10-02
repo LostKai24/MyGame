@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Посадка на Луну</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game">
+    <header id="hud">
+      <div class="hud-item"><span class="hud-label">Время</span><span id="hud-time">0.0 с</span></div>
+      <div class="hud-item"><span class="hud-label">Скорость</span><span id="hud-speed">0.0</span></div>
+      <div class="hud-item"><span class="hud-label">ΔV</span><span id="hud-dv">0.0</span></div>
+      <div class="hud-item"><span class="hud-label">Импульсы</span><span id="hud-burns">3</span></div>
+    </header>
+
+    <div id="canvas-wrap">
+      <canvas id="canvas"></canvas>
+      <div id="message" class="hidden">
+        <h2 id="message-title">Готов?</h2>
+        <p id="message-text">Настрой импульс и нажми «Пуск»</p>
+        <button id="restart-btn" type="button">Заново</button>
+      </div>
+    </div>
+
+    <footer id="controls">
+      <div class="control-row">
+        <label for="power">Сила</label>
+        <input id="power" type="range" min="0" max="100" value="50" step="1">
+        <span id="power-value">50</span>
+      </div>
+      <div class="control-row">
+        <label for="angle">Угол</label>
+        <input id="angle" type="range" min="0" max="359" value="45" step="1">
+        <span id="angle-value">45°</span>
+      </div>
+      <div class="button-row">
+        <button id="start-btn" type="button">Старт</button>
+        <button id="burn-btn" type="button">Импульс</button>
+        <button id="reset-btn" type="button">Сброс</button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
