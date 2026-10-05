@@ -563,4 +563,52 @@
   turnRightBtn.addEventListener("mouseup", function () { turnRight = false; });
   turnRightBtn.addEventListener("mouseleave", function () { turnRight = false; });
   turnRightBtn.addEventListener("touchstart", function (e) { e.preventDefault(); turnRight = true; }, { passive: false });
-  turnRightBtn.addEventListener("tou
+  turnRightBtn.addEventListener("touchend", function () { turnRight = false; });
+
+  startBtn.addEventListener("click", startFlight);
+  resetBtn.addEventListener("click", resetGame);
+  restartBtn.addEventListener("click", resetGame);
+
+  // Клавиатура
+  document.addEventListener("keydown", function (e) {
+    if (e.repeat) return;
+    if (state && state.status === "flying") {
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "ф") { turnLeft = true; e.preventDefault(); }
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "в") { turnRight = true; e.preventDefault(); }
+      if (e.key === " " || e.key === "ArrowUp" || e.key === "w" || e.key === "ц") {
+        if (state.fuel > 0) thrustCenter = true;
+        e.preventDefault();
+      }
+      // НОВОЕ: Q/E для боковых двигателей
+      if (e.key === "q" || e.key === "й") {
+        if (state.fuel > 0) thrustLeft = true;
+        e.preventDefault();
+      }
+      if (e.key === "e" || e.key === "у") {
+        if (state.fuel > 0) thrustRight = true;
+        e.preventDefault();
+      }
+    }
+    if (e.key === "Enter") {
+      if (state && state.status === "idle") startFlight();
+      else if (state && (state.status === "won" || state.status === "lost")) resetGame();
+      e.preventDefault();
+    }
+  });
+
+  document.addEventListener("keyup", function (e) {
+    if (e.key === "ArrowLeft" || e.key === "a" || e.key === "ф") turnLeft = false;
+    if (e.key === "ArrowRight" || e.key === "d" || e.key === "в") turnRight = false;
+    if (e.key === " " || e.key === "ArrowUp" || e.key === "w" || e.key === "ц") thrustCenter = false;
+    if (e.key === "q" || e.key === "й") thrustLeft = false;
+    if (e.key === "e" || e.key === "у") thrustRight = false;
+  });
+
+  // ---------- Старт ----------
+  fitCanvas();
+  initStars();
+  resetState();
+  throttleValue.textContent = throttleInput.value + "%";
+  updateAngleLabel();
+  requestAnimationFrame(loop);
+})();
