@@ -17,6 +17,14 @@
 
     <div id="canvas-wrap">
       <canvas id="canvas"></canvas>
+
+      <!-- НОВОЕ: панель масштабирования -->
+      <div id="zoom-controls">
+        <button id="zoom-in" type="button" title="Приблизить">+</button>
+        <button id="zoom-out" type="button" title="Отдалить">−</button>
+        <button id="zoom-reset" type="button" title="Сбросить масштаб">⟳</button>
+      </div>
+
       <div id="message" class="hidden">
         <h2 id="message-title">Готов?</h2>
         <p id="message-text">Выбери двигатель и мягко сядь в жёлтую зону</p>
@@ -39,7 +47,6 @@
         <span id="throttle-value">60%</span>
       </div>
 
-      <!-- НОВОЕ: Управление тремя двигателями -->
       <div class="control-row engines-row">
         <label>Двигатели</label>
         <div class="engines-grid">

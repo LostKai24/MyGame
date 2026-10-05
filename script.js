@@ -17,7 +17,6 @@
   var turnLeftBtn = document.getElementById("turn-left");
   var turnRightBtn = document.getElementById("turn-right");
 
-  // НОВОЕ: три двигателя
   var engineLeftBtn = document.getElementById("engine-left");
   var engineCenterBtn = document.getElementById("engine-center");
   var engineRightBtn = document.getElementById("engine-right");
@@ -30,6 +29,11 @@
   var messageBox = document.getElementById("message");
   var messageTitle = document.getElementById("message-title");
   var messageText = document.getElementById("message-text");
+
+  // НОВОЕ: элементы управления зумом
+  var zoomInBtn = document.getElementById("zoom-in");
+  var zoomOutBtn = document.getElementById("zoom-out");
+  var zoomResetBtn = document.getElementById("zoom-reset");
 
   var ENGINES = {
     light:    { name: "Лёгкий",      thrust: 22,  fuelRate: 6  },
@@ -50,7 +54,6 @@
   var ROTATE_SPEED = 70;
   var FUEL_MAX = 100;
 
-  // НОВОЕ: старт по орбите + анимированные звёзды + случайная зона
   var ORBIT_SPEED = 55;
   var stars = [];
   var landingZone = { angleStart: 0, angleEnd: 0 };
@@ -61,12 +64,18 @@
   var accumulatedTime = 0;
   var STEP = 1 / 120;
 
-  // НОВОЕ: три раздельные тяги вместо одной
   var thrustCenter = false;
   var thrustLeft = false;
   var thrustRight = false;
   var turnLeft = false;
   var turnRight = false;
+
+  // НОВОЕ: параметры зума/панорамирования
+  var zoom = 1;
+  var zoomMin = 0.5;
+  var zoomMax = 4;
+  var panX = 0;
+  var panY = 0;
 
   // ---------- Анимированные звёзды ----------
   function initStars() {
@@ -100,12 +109,19 @@
     render();
   });
 
+  // ---------- Мир -> экран (с учётом зума и панорамирования) ----------
   function getView() {
     var w = canvas.clientWidth;
     var h = canvas.clientHeight;
-    var scale = Math.min(w / WORLD.width, h / WORLD.height);
-    var offsetX = (w - WORLD.width * scale) / 2;
-    var offsetY = (h - WORLD.height * scale) / 2;
+    var baseScale = Math.min(w / WORLD.width, h / WORLD.height);
+    var scale = baseScale * zoom;
+
+    var worldCenterX = WORLD.width / 2;
+    var worldCenterY = WORLD.height / 2;
+
+    var offsetX = w / 2 - (worldCenterX + panX) * scale;
+    var offsetY = h / 2 - (worldCenterY + panY) * scale;
+
     return { scale: scale, offsetX: offsetX, offsetY: offsetY };
   }
 
@@ -114,14 +130,59 @@
     return { x: v.offsetX + x * v.scale, y: v.offsetY + y * v.scale };
   }
 
+  // Вспомогательная: экран -> мир для заданного zoom
+  function screenToWorld(sx, sy, z) {
+    var w = canvas.clientWidth;
+    var h = canvas.clientHeight;
+    var baseScale = Math.min(w / WORLD.width, h / WORLD.height);
+    var scale = baseScale * z;
+    var worldCenterX = WORLD.width / 2;
+    var worldCenterY = WORLD.height / 2;
+
+    var offsetX = w / 2 - (worldCenterX + panX) * scale;
+    var offsetY = h / 2 - (worldCenterY + panY) * scale;
+
+    return {
+      x: (sx - offsetX) / scale,
+      y: (sy - offsetY) / scale
+    };
+  }
+
+  // НОВОЕ: установка масштаба с опциональным фокусом
+  function setZoom(newZoom, focusScreenX, focusScreenY) {
+    var oldZoom = zoom;
+    zoom = Math.max(zoomMin, Math.min(zoomMax, newZoom));
+    if (zoom === oldZoom) return;
+
+    if (focusScreenX != null && focusScreenY != null) {
+      // Мировые координаты под точкой фокуса до и после зума
+      var before = screenToWorld(focusScreenX, focusScreenY, oldZoom);
+
+      // Временно применяем новый zoom, чтобы посчитать после
+      var savedZoom = zoom;
+      // Сбрасываем pan на момент расчёта «после» (используем текущий pan)
+      var after = screenToWorld(focusScreenX, focusScreenY, savedZoom);
+
+      panX += before.x - after.x;
+      panY += before.y - after.y;
+    }
+
+    render();
+  }
+
+  function resetZoom() {
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+    render();
+  }
+
   // ---------- Состояние ----------
   function resetState() {
-    // НОВОЕ: случайная посадочная зона (верхняя полусфера)
     var startAngle = Math.PI * (0.15 + Math.random() * 0.7);
     var endAngle = startAngle + Math.PI * (0.15 + Math.random() * 0.1);
     landingZone = { angleStart: startAngle, angleEnd: endAngle };
 
-    // НОВОЕ: старт на орбите (горизонтальная скорость по касательной)
     var startAnglePos = -Math.PI / 2;
     var startX = WORLD.moon.x + Math.cos(startAnglePos) * (WORLD.moon.r + START_HEIGHT);
     var startY = WORLD.moon.y + Math.sin(startAnglePos) * (WORLD.moon.r + START_HEIGHT);
@@ -147,6 +208,12 @@
     turnRight = false;
     accumulatedTime = 0;
     lastTimestamp = 0;
+
+    // Сброс зума при новом запуске
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+
     updateHud();
     hideMessage();
     updateButtons();
@@ -190,7 +257,6 @@
     turnLeftBtn.disabled = !flying;
     turnRightBtn.disabled = !flying;
 
-    // НОВОЕ: три кнопки двигателей
     engineLeftBtn.disabled = !flying;
     engineCenterBtn.disabled = !flying;
     engineRightBtn.disabled = !flying;
@@ -216,7 +282,6 @@
     return { ax: a * (dx / d), ay: a * (dy / d) };
   }
 
-  // НОВОЕ: вспомогательная функция для отдельного двигателя
   function applyThrust(angleOffset, accel, dt) {
     var angle = state.ship.angle + angleOffset;
     state.ship.vx += Math.cos(angle) * accel * dt;
@@ -238,18 +303,14 @@
     var baseAccel = engine.thrust * throttle;
     var fuelUsed = 0;
 
-    // НОВОЕ: три двигателя вместо одного
-    // Центральный — прямо назад
     if (thrustCenter && state.fuel > 0) {
       applyThrust(Math.PI, baseAccel, dt);
       fuelUsed += engine.fuelRate * throttle * dt;
     }
-    // Левый — назад и вправо
     if (thrustLeft && state.fuel > 0) {
       applyThrust(Math.PI - 0.3, baseAccel * 0.7, dt);
       fuelUsed += engine.fuelRate * throttle * 0.7 * dt;
     }
-    // Правый — назад и влево
     if (thrustRight && state.fuel > 0) {
       applyThrust(Math.PI + 0.3, baseAccel * 0.7, dt);
       fuelUsed += engine.fuelRate * throttle * 0.7 * dt;
@@ -291,7 +352,6 @@
       var ang = Math.atan2(s.y - WORLD.moon.y, s.x - WORLD.moon.x);
       if (ang < 0) ang += Math.PI * 2;
 
-      // НОВОЕ: зона посадки теперь динамическая
       var a0 = landingZone.angleStart;
       var a1 = landingZone.angleEnd;
       if (a0 < 0) a0 += Math.PI * 2;
@@ -346,7 +406,6 @@
     ctx.fillStyle = "#05060a";
     ctx.fillRect(0, 0, w, h);
 
-    // НОВОЕ: анимированные звёзды
     drawStars();
 
     if (!state) return;
@@ -357,7 +416,6 @@
     drawShip();
   }
 
-  // НОВОЕ: мерцающие и медленно плывущие звёзды
   function drawStars() {
     var t = Date.now() * 0.001;
     for (var i = 0; i < stars.length; i++) {
@@ -400,7 +458,6 @@
     ctx.fill();
   }
 
-  // НОВОЕ: зона посадки теперь берётся из динамической переменной
   function drawLandingZone() {
     var v = getView();
     var p = toScreen(WORLD.moon.x, WORLD.moon.y);
@@ -445,7 +502,6 @@
     ctx.fillStyle = "#ffffff";
     ctx.fill();
 
-    // НОВОЕ: отдельное пламя для каждого из трёх двигателей
     var flameColor = "#ff8c42";
     if (state.status === "flying" && state.fuel > 0) {
       if (thrustCenter) {
@@ -520,21 +576,21 @@
     render();
   }
 
-  // ---------- События ----------
+  // ---------- События интерфейса ----------
   throttleInput.addEventListener("input", function () {
     throttleValue.textContent = throttleInput.value + "%";
   });
 
   engineSelect.addEventListener("change", function () {});
 
-  // Старая кнопка «Тяга» — теперь управляет центральным двигателем
+  // Центральный двигатель (старая кнопка «Тяга»)
   burnBtn.addEventListener("mousedown", function () { if (state && state.status === "flying" && state.fuel > 0) thrustCenter = true; });
   burnBtn.addEventListener("mouseup", function () { thrustCenter = false; });
   burnBtn.addEventListener("mouseleave", function () { thrustCenter = false; });
   burnBtn.addEventListener("touchstart", function (e) { e.preventDefault(); if (state && state.status === "flying" && state.fuel > 0) thrustCenter = true; }, { passive: false });
   burnBtn.addEventListener("touchend", function () { thrustCenter = false; });
 
-  // НОВОЕ: три кнопки двигателей
+  // Три кнопки двигателей
   engineLeftBtn.addEventListener("mousedown", function () { if (state && state.status === "flying") thrustLeft = true; });
   engineLeftBtn.addEventListener("mouseup", function () { thrustLeft = false; });
   engineLeftBtn.addEventListener("mouseleave", function () { thrustLeft = false; });
@@ -553,6 +609,7 @@
   engineRightBtn.addEventListener("touchstart", function (e) { e.preventDefault(); if (state && state.status === "flying") thrustRight = true; }, { passive: false });
   engineRightBtn.addEventListener("touchend", function () { thrustRight = false; });
 
+  // Повороты
   turnLeftBtn.addEventListener("mousedown", function () { turnLeft = true; });
   turnLeftBtn.addEventListener("mouseup", function () { turnLeft = false; });
   turnLeftBtn.addEventListener("mouseleave", function () { turnLeft = false; });
@@ -569,7 +626,82 @@
   resetBtn.addEventListener("click", resetGame);
   restartBtn.addEventListener("click", resetGame);
 
-  // Клавиатура
+  // ---------- НОВОЕ: зум кнопками ----------
+  zoomInBtn.addEventListener("click", function () { setZoom(zoom * 1.25); });
+  zoomOutBtn.addEventListener("click", function () { setZoom(zoom / 1.25); });
+  zoomResetBtn.addEventListener("click", resetZoom);
+
+  // ---------- НОВОЕ: зум колесом мыши ----------
+  canvas.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    var rect = canvas.getBoundingClientRect();
+    var mx = e.clientX - rect.left;
+    var my = e.clientY - rect.top;
+    var factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    setZoom(zoom * factor, mx, my);
+  }, { passive: false });
+
+  // ---------- НОВОЕ: pinch-to-zoom + панорамирование одним пальцем ----------
+  var activeTouches = {};
+  var lastPinchDist = 0;
+
+  canvas.addEventListener("touchstart", function (e) {
+    if (e.touches.length === 1) {
+      activeTouches[e.touches[0].identifier] = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2) {
+      var dx = e.touches[0].clientX - e.touches[1].clientX;
+      var dy = e.touches[0].clientY - e.touches[1].clientY;
+      lastPinchDist = Math.sqrt(dx * dx + dy * dy);
+      activeTouches = {};
+    }
+  }, { passive: true });
+
+  canvas.addEventListener("touchmove", function (e) {
+    // Панорамирование одним пальцем
+    if (e.touches.length === 1 && activeTouches[e.touches[0].identifier]) {
+      var prev = activeTouches[e.touches[0].identifier];
+      var cur = e.touches[0];
+      var dxScreen = cur.clientX - prev.x;
+      var dyScreen = cur.clientY - prev.y;
+
+      var v = getView();
+      panX -= dxScreen / v.scale;
+      panY -= dyScreen / v.scale;
+
+      activeTouches[e.touches[0].identifier] = { x: cur.clientX, y: cur.clientY };
+      render();
+      e.preventDefault();
+    }
+    // Pinch-to-zoom
+    else if (e.touches.length === 2) {
+      var dx = e.touches[0].clientX - e.touches[1].clientX;
+      var dy = e.touches[0].clientY - e.touches[1].clientY;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (lastPinchDist > 0) {
+        var factor = dist / lastPinchDist;
+        var midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        var midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        var rect = canvas.getBoundingClientRect();
+        setZoom(zoom * factor, midX - rect.left, midY - rect.top);
+      }
+      lastPinchDist = dist;
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  canvas.addEventListener("touchend", function (e) {
+    for (var id in activeTouches) {
+      var found = false;
+      for (var i = 0; i < e.touches.length; i++) {
+        if (e.touches[i].identifier == id) { found = true; break; }
+      }
+      if (!found) delete activeTouches[id];
+    }
+    if (e.touches.length < 2) lastPinchDist = 0;
+  }, { passive: true });
+
+  // ---------- Клавиатура ----------
   document.addEventListener("keydown", function (e) {
     if (e.repeat) return;
     if (state && state.status === "flying") {
@@ -579,7 +711,6 @@
         if (state.fuel > 0) thrustCenter = true;
         e.preventDefault();
       }
-      // НОВОЕ: Q/E для боковых двигателей
       if (e.key === "q" || e.key === "й") {
         if (state.fuel > 0) thrustLeft = true;
         e.preventDefault();
@@ -589,6 +720,11 @@
         e.preventDefault();
       }
     }
+    // НОВОЕ: горячие клавиши зума
+    if (e.key === "+" || e.key === "=") { setZoom(zoom * 1.15); e.preventDefault(); }
+    if (e.key === "-" || e.key === "_") { setZoom(zoom / 1.15); e.preventDefault(); }
+    if (e.key === "0") { resetZoom(); e.preventDefault(); }
+
     if (e.key === "Enter") {
       if (state && state.status === "idle") startFlight();
       else if (state && (state.status === "won" || state.status === "lost")) resetGame();

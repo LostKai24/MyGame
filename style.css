@@ -249,7 +249,7 @@ button:disabled {
   color: #c8d2ea;
 }
 
-/* НОВОЕ: сетка из трёх кнопок двигателей */
+/* Сетка из трёх кнопок двигателей */
 .engines-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -269,6 +269,39 @@ button:disabled {
   background: #ff8c42;
   color: #1a0d02;
   border-color: #ff8c42;
+}
+
+/* НОВОЕ: панель масштабирования */
+#zoom-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 5;
+}
+
+#zoom-controls button {
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  font-size: 20px;
+  font-weight: 700;
+  border-radius: 8px;
+  background: rgba(29, 39, 66, 0.85);
+  color: #e8eefc;
+  border: 1px solid #3b4a70;
+}
+
+#zoom-controls button:hover {
+  background: rgba(78, 161, 255, 0.9);
+  color: #06101f;
+}
+
+#zoom-controls button:active {
+  transform: scale(0.95);
 }
 
 @media (min-width: 720px) {
