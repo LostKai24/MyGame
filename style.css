@@ -249,6 +249,28 @@ button:disabled {
   color: #c8d2ea;
 }
 
+/* НОВОЕ: сетка из трёх кнопок двигателей */
+.engines-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.engine-btn {
+  font-size: 12px;
+  padding: 8px 4px;
+  min-height: 36px;
+  background: #2a3350;
+  color: #c8d2ea;
+  border: 1px solid #3b4a70;
+}
+
+.engine-btn.active {
+  background: #ff8c42;
+  color: #1a0d02;
+  border-color: #ff8c42;
+}
+
 @media (min-width: 720px) {
   #hud {
     font-size: 14px;
