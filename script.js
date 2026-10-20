@@ -27,8 +27,6 @@
   var messageText = document.getElementById("message-text");
 
   // ---------- Мир 3D ----------
-  // Координаты в условных единицах. Ось Y — "вверх" в мировом смысле,
-  // но камера смотрит так, что Y проецируется как вертикаль экрана.
   var WORLD = {
     earth: { x: -220, y: -40, z: -60, r: 70 },
     moon:  { x:  260, y:  70, z:  40, r: 45 }
@@ -43,14 +41,12 @@
   var MAX_TIME = 150;
 
   // ---------- Камера ----------
-  // Простая перспектива: камера в точке C, смотрит в точку target.
-  // Угол поворота вокруг вертикальной оси Y — cameraYaw.
   var camera = {
-    yaw: 0.6,          // радианы
-    pitch: 0.25,       // наклон вниз
+    yaw: 0.6,
+    pitch: 0.25,
     distance: 900,
     target: { x: 20, y: 10, z: -10 },
-    fov: 60            // градусы
+    fov: 60
   };
 
   // ---------- Состояние ----------
@@ -59,9 +55,6 @@
   var lastTimestamp = 0;
   var accumulatedTime = 0;
   var STEP = 1 / 120;
-
-  // Активный параметр для стрелок: "power" | "azimuth" | "elevation"
-  var activeParam = "power";
 
   // ---------- Canvas ----------
   function fitCanvas() {
@@ -82,27 +75,22 @@
   });
 
   // ---------- 3D → 2D проекция ----------
-  // Возвращает { x, y, depth } в пикселях экрана либо null, если точка за камерой.
   function project(p) {
-    // Вектор от цели камеры до точки
     var dx = p.x - camera.target.x;
     var dy = p.y - camera.target.y;
     var dz = p.z - camera.target.z;
 
-    // Поворот вокруг Y на -yaw
     var cosY = Math.cos(-camera.yaw);
     var sinY = Math.sin(-camera.yaw);
     var rx = dx * cosY - dz * sinY;
     var rz = dx * sinY + dz * cosY;
     var ry = dy;
 
-    // Наклон по pitch
     var cosP = Math.cos(-camera.pitch);
     var sinP = Math.sin(-camera.pitch);
     var ry2 = ry * cosP - rz * sinP;
     var rz2 = ry * sinP + rz * cosP;
 
-    // Камера "позади" на distance
     var camZ = rz2 + camera.distance;
 
     if (camZ <= 1) return null;
@@ -133,16 +121,12 @@
 
   // ---------- Рандомные зоны посадки ----------
   function randomLandingZones(count) {
-    // Равномерно по сфере Луны: используем сферические координаты.
-    // Исключаем точки, слишком близкие к "полюсам" по Y, чтобы они были видны.
     var zones = [];
     for (var i = 0; i < count; i++) {
-      // случайное направление на сфере
-      var u = Math.random() * 2 - 1; // cos(theta) от -1 до 1
+      var u = Math.random() * 2 - 1;
       var phi = Math.random() * Math.PI * 2;
       var theta = Math.acos(u);
 
-      // Ограничим theta, чтобы зоны были не строго на полюсах
       if (theta < 0.35) theta = 0.35 + Math.random() * 0.2;
       if (theta > Math.PI - 0.35) theta = Math.PI - 0.35 - Math.random() * 0.2;
 
@@ -151,19 +135,16 @@
       var dz = Math.sin(theta) * Math.sin(phi);
 
       zones.push({
-        dir: v3(dx, dy, dz),       // единичный вектор от центра Луны
-        r: 0.28 + Math.random() * 0.12, // угловой радиус пятна (радианы)
+        dir: v3(dx, dy, dz),
+        r: 0.28 + Math.random() * 0.12,
         id: i + 1
       });
     }
-    // Сортируем по id, чтобы номер цели был стабильным
     zones.sort(function (a, b) { return a.id - b.id; });
     return zones;
   }
 
-  // Проверка: находится ли точка на поверхности Луны внутри зоны посадки
   function insideZone(point, moon, zone) {
-    // Вектор от центра Луны к точке
     var dx = point.x - moon.x;
     var dy = point.y - moon.y;
     var dz = point.z - moon.z;
@@ -172,15 +153,12 @@
     dx /= len; dy /= len; dz /= len;
 
     var dot = dx * zone.dir.x + dy * zone.dir.y + dz * zone.dir.z;
-    // Угол между направлением и центром зоны
     var angle = Math.acos(Math.max(-1, Math.min(1, dot)));
     return angle <= zone.r;
   }
 
   // ---------- Стартовое состояние ----------
   function resetState() {
-    // Аппарат стартует над Землёй: берём точку на расстоянии (r + offset)
-    // по направлению к Луне, с касательной скоростью.
     var e = WORLD.earth;
     var m = WORLD.moon;
 
@@ -193,7 +171,6 @@
     var sy = e.y + dirToMoon.y * startR;
     var sz = e.z + dirToMoon.z * startR;
 
-    // Касательная скорость: перпендикуляр к dirToMoon и глобальному "вверх" (0,1,0).
     var up = v3(0, 1, 0);
     var tangent = v3(
       dirToMoon.y * up.z - dirToMoon.z * up.y,
@@ -214,18 +191,15 @@
       dv: 0,
       burnsLeft: MAX_BURNS,
       trail: [v3(sx, sy, sz)],
-      status: "idle", // idle | flying | won | lost
-      zones: randomLandingZones(3),
-      activeTargetId: 1
+      status: "idle",
+      zones: randomLandingZones(3)
     };
 
     running = false;
     accumulatedTime = 0;
     lastTimestamp = 0;
 
-    // Активная цель для HUD — просто первая (подсветим все)
     hudTarget.textContent = "1–3";
-
     updateHud();
     hideMessage();
     updateButtons();
@@ -273,7 +247,6 @@
     var e = WORLD.earth;
     var m = WORLD.moon;
 
-    // К Земле
     var dxE = e.x - p.x, dyE = e.y - p.y, dzE = e.z - p.z;
     var dE2 = dxE * dxE + dyE * dyE + dzE * dzE;
     var dE = Math.sqrt(dE2) || 1;
@@ -282,7 +255,6 @@
     var ayE = aE * (dyE / dE);
     var azE = aE * (dzE / dE);
 
-    // К Луне
     var dxM = m.x - p.x, dyM = m.y - p.y, dzM = m.z - p.z;
     var dM2 = dxM * dxM + dyM * dyM + dzM * dzM;
     var dM = Math.sqrt(dM2) || 1;
@@ -307,7 +279,6 @@
 
     state.time += dt;
 
-    // Траектория
     var trail = state.trail;
     var last = trail[trail.length - 1];
     var dx = s.x - last.x, dy = s.y - last.y, dz = s.z - last.z;
@@ -322,15 +293,12 @@
   function checkEndConditions() {
     var s = state.ship;
 
-    // Столкновение с Землёй
     if (dist(s, WORLD.earth) <= WORLD.earth.r) {
       endGame("lost", "Аппарат упал на Землю", "Попробуй другой угол или силу импульса.");
       return;
     }
 
-    // Касание Луны
     if (dist(s, WORLD.moon) <= WORLD.moon.r) {
-      // Проверяем, в какую зону попали
       var hitZone = null;
       for (var i = 0; i < state.zones.length; i++) {
         if (insideZone(s, WORLD.moon, state.zones[i])) {
@@ -349,17 +317,14 @@
       return;
     }
 
-    // Улёт слишком далеко
     var shipR = Math.sqrt(s.x * s.x + s.y * s.y + s.z * s.z);
     if (shipR > 2500) {
-      endGame("lost", "Аппарат улетел в открытый космос",
-        "Импульс оказался слишком сильным или направлен не туда.");
+      endGame("lost", "Аппарат улетел в открытый космос", "Импульс оказался слишком сильным.");
       return;
     }
 
     if (state.time >= MAX_TIME) {
-      endGame("lost", "Время вышло",
-        "Не удалось достичь Луны за отведённое время.");
+      endGame("lost", "Время вышло", "Не удалось достичь Луны за отведённое время.");
       return;
     }
   }
@@ -386,35 +351,29 @@
 
     if (!state) return;
 
-    // Собираем объекты для z-сортировки
     var drawables = [];
 
     drawables.push({ kind: "sphere", body: WORLD.earth, color1: "#2b6fd6", color2: "#1a4a94", label: "Земля" });
     drawables.push({ kind: "sphere", body: WORLD.moon,  color1: "#9aa4b8", color2: "#6a7386", label: "Луна" });
 
-    // Зоны посадки
     for (var i = 0; i < state.zones.length; i++) {
       drawables.push({ kind: "zone", zone: state.zones[i] });
     }
 
-    // Траектория — рисуем как полилинию, но с учётом глубины (просто линией)
-    // Чтобы z-сортировка не ломала линию, рисуем её до объектов.
     drawTrail();
 
-    // Сфера и зоны — сортируем по глубине центра
     for (var j = 0; j < drawables.length; j++) {
       var d = drawables[j];
       if (d.kind === "sphere") {
         var c = project(d.body);
         d.depth = c ? c.depth : Infinity;
       } else if (d.kind === "zone") {
-        // Глубина центра зоны на поверхности Луны
         var zc = zoneCenterWorld(d.zone);
         var pz = project(zc);
         d.depth = pz ? pz.depth : Infinity;
       }
     }
-    drawables.sort(function (a, b) { return b.depth - a.depth; }); // дальние сначала
+    drawables.sort(function (a, b) { return b.depth - a.depth; });
 
     for (var k = 0; k < drawables.length; k++) {
       var item = drawables[k];
@@ -441,10 +400,7 @@
     var r = body.r * p.scale;
     if (r < 1) return;
 
-    var grad = ctx.createRadialGradient(
-      p.x - r * 0.3, p.y - r * 0.3, r * 0.1,
-      p.x, p.y, r
-    );
+    var grad = ctx.createRadialGradient(p.x - r * 0.3, p.y - r * 0.3, r * 0.1, p.x, p.y, r);
     grad.addColorStop(0, color1);
     grad.addColorStop(1, color2);
 
@@ -459,7 +415,6 @@
     ctx.fillText(label, p.x, p.y + r + 16);
   }
 
-  // Центр зоны в мировых координатах (на поверхности Луны)
   function zoneCenterWorld(zone) {
     var m = WORLD.moon;
     return v3(
@@ -471,21 +426,14 @@
 
   function drawZone(zone) {
     var m = WORLD.moon;
-    // Рисуем "пятно" как набор точек по окружности вокруг центра зоны
-    // на сфере. Упрощение: эллипс в экранных координатах.
     var center = project(zoneCenterWorld(zone));
     if (!center) return;
 
     var rScreen = m.r * center.scale * Math.sin(zone.r);
     if (rScreen < 2) return;
 
-    // Насколько зона повёрнута к камере — если от нас, рисуем тусклее.
     var c = zoneCenterWorld(zone);
-    var toCam = v3(
-      camera.target.x - c.x,
-      camera.target.y - c.y,
-      camera.target.z - c.z
-    );
+    var toCam = v3(camera.target.x - c.x, camera.target.y - c.y, camera.target.z - c.z);
     var len = length(toCam) || 1;
     toCam.x /= len; toCam.y /= len; toCam.z /= len;
     var facing = toCam.x * zone.dir.x + toCam.y * zone.dir.y + toCam.z * zone.dir.z;
@@ -527,14 +475,9 @@
 
     var size = Math.max(4, Math.min(14, 10 * p.scale));
 
-    // Направление скорости на экране: спроецируем точку "чуть впереди"
     var s = state.ship;
     var sp = Math.sqrt(s.vx * s.vx + s.vy * s.vy + s.vz * s.vz) || 1;
-    var ahead = v3(
-      s.x + (s.vx / sp) * 10,
-      s.y + (s.vy / sp) * 10,
-      s.z + (s.vz / sp) * 10
-    );
+    var ahead = v3(s.x + (s.vx / sp) * 10, s.y + (s.vy / sp) * 10, s.z + (s.vz / sp) * 10);
     var pa = project(ahead);
 
     var ang = 0;
@@ -569,3 +512,93 @@
       while (accumulatedTime >= STEP) {
         stepPhysics(STEP);
         accumulatedTime -= STEP;
+        if (!running || state.status !== "flying") break;
+      }
+      updateHud();
+    }
+
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- Управление ----------
+  function startFlight() {
+    if (!state || state.status === "flying") return;
+    if (state.status === "won" || state.status === "lost") return;
+
+    state.status = "flying";
+    running = true;
+    lastTimestamp = 0;
+    accumulatedTime = 0;
+    hideMessage();
+    updateButtons();
+  }
+
+  function applyBurn() {
+    if (!state || state.status !== "flying") return;
+    if (state.burnsLeft <= 0) return;
+
+    var power = parseFloat(powerInput.value);
+    var azDeg = parseFloat(azimuthInput.value);
+    var elDeg = parseFloat(elevationInput.value);
+    
+    var azRad = azDeg * Math.PI / 180;
+    var elRad = elDeg * Math.PI / 180;
+
+    var dv = power * BURN_STRENGTH;
+
+    // Вектор импульса с учётом азимута и возвышения
+    var vx = Math.cos(elRad) * Math.cos(azRad) * dv;
+    var vy = Math.sin(elRad) * dv;
+    var vz = Math.cos(elRad) * Math.sin(azRad) * dv;
+
+    state.ship.vx += vx;
+    state.ship.vy += vy;
+    state.ship.vz += vz;
+
+    state.dv += dv;
+    state.burnsLeft -= 1;
+
+    updateHud();
+    updateButtons();
+  }
+
+  function resetGame() {
+    resetState();
+    render();
+  }
+
+  // ---------- Обработчики ----------
+  powerInput.addEventListener("input", function () {
+    powerValue.textContent = powerInput.value;
+  });
+  azimuthInput.addEventListener("input", function () {
+    azimuthValue.textContent = azimuthInput.value + "°";
+  });
+  elevationInput.addEventListener("input", function () {
+    elevationValue.textContent = elevationInput.value + "°";
+  });
+
+  startBtn.addEventListener("click", startFlight);
+  burnBtn.addEventListener("click", applyBurn);
+  resetBtn.addEventListener("click", resetGame);
+  restartBtn.addEventListener("click", resetGame);
+
+  // Обработка клавиатуры
+  document.addEventListener("keydown", function (e) {
+    if (state && state.status === "flying") {
+      if (e.key === " " || e.key === "Spacebar") {
+        applyBurn();
+        e.preventDefault();
+      }
+    } else if (e.key === "Enter") {
+      if (state && state.status === "idle") startFlight();
+      else resetGame();
+    }
+  });
+
+  // ---------- Старт ----------
+  fitCanvas();
+  resetState();
+  requestAnimationFrame(loop);
+})();
