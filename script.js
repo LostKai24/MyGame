@@ -37,13 +37,9 @@
   var START_ORBIT_OFFSET = 90;
   var START_SPEED = 55;
   var MAX_TIME = 300;
-  var LANDING_SPEED_LIMIT = 15; // Максимальная скорость для успешной посадки
+  var LANDING_SPEED_LIMIT = 15; // Максимальная безопасная скорость касания
 
-  var ENGINES = [
-    { force: 10 },
-    { force: 25 },
-    { force: 50 }
-  ];
+  var ENGINES = [{ force: 10 }, { force: 25 }, { force: 50 }];
   var currentEngine = 1;
 
   var camera = { yaw: 0.6, pitch: 0.25, distance: 900, target: { x: 20, y: 10, z: -10 }, fov: 60 };
@@ -54,11 +50,8 @@
   var accumulatedTime = 0;
   var STEP = 1 / 120;
   
-  // Переменные управления
   var engineThrusting = false;
-  var rcsLeft = false;
-  var rcsRight = false;
-  var rcsDown = false;
+  var rcsLeft = false, rcsRight = false, rcsDown = false;
   var keys = { left: false, right: false, down: false };
 
   function fitCanvas() {
@@ -90,43 +83,43 @@
   function length(v) { return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
   function dist(a, b) { return Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2 + (a.z-b.z)**2); }
 
-  // ---------- Зоны посадки (Синие дуги) ----------
+  // ---------- Зоны посадки (Длинные пояса) ----------
   function randomLandingZones(count) {
     var zones = [];
     for (var i = 0; i < count; i++) {
-      // Случайная точка на сфере (широта/долгота)
-      var u = Math.random() * 2 - 1;
-      var phi = Math.random() * Math.PI * 2;
-      var theta = Math.acos(u);
-      if (theta < 0.35) theta = 0.35 + Math.random() * 0.2;
-      if (theta > Math.PI - 0.35) theta = Math.PI - 0.35 - Math.random() * 0.2;
+      // Задаем случайный вектор нормали для центра пояса
+      // Берем широту в пределах от -45 до +45 градусов, чтобы пояс был виден с экватора
+      var lat = (Math.random() - 0.5) * Math.PI * 0.8; 
+      var lon = Math.random() * Math.PI * 2;
+      
+      var dy = Math.sin(lat);
+      var dx = Math.cos(lat) * Math.cos(lon);
+      var dz = Math.cos(lat) * Math.sin(lon);
 
-      var dx = Math.sin(theta) * Math.cos(phi);
-      var dy = Math.cos(theta);
-      var dz = Math.sin(theta) * Math.sin(phi);
-
-      // Задаем дугу: угловой радиус
       zones.push({ 
         dir: v3(dx, dy, dz), 
-        radius: 0.20 + Math.random() * 0.1, // Размер дуги (радианы)
+        // Ширина пояса (угловой радиус от центра)
+        width: 0.15 + Math.random() * 0.15, 
         id: i + 1 
       });
     }
     return zones;
   }
 
-  // Проверка: попали ли мы в зону касания
+  // Проверка: попали ли мы на пояс
   function checkLandedInZone(point, moon, zone) {
     var dx = point.x - moon.x, dy = point.y - moon.y, dz = point.z - moon.z;
     var len = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (len === 0) return false;
     dx /= len; dy /= len; dz /= len;
 
+    // Скалярное произведение показывает, насколько точка близка к центру пояса по широте.
+    // Долгота (поворот вокруг оси) здесь не проверяется, поэтому пояс получается "бесконечным" вдоль экватора.
     var dot = dx * zone.dir.x + dy * zone.dir.y + dz * zone.dir.z;
     var angle = Math.acos(Math.max(-1, Math.min(1, dot)));
     
-    // Мы в зоне, если угол между точкой касания и центром зоны меньше углового радиуса
-    return angle <= zone.radius;
+    // Если угол отклонения меньше ширины пояса — мы попали.
+    return angle <= zone.width;
   }
 
   function resetState() {
@@ -153,7 +146,7 @@
       ship: { x: sx, y: sy, z: sz, vx: tangent.x * START_SPEED, vy: tangent.y * START_SPEED, vz: tangent.z * START_SPEED },
       time: 0, fuel: startFuel,
       trail: [v3(sx, sy, sz)], status: "idle",
-      zones: randomLandingZones(2), // Всего 2 зоны (как дуги)
+      zones: randomLandingZones(2), // 2 пояса
       heading: 90
     };
 
@@ -226,21 +219,18 @@
       if (state.fuel < 0) state.fuel = 0;
     }
 
-    // Маршевый двигатель
     var rad = state.heading * Math.PI / 180;
     var thrustX = Math.cos(rad) * force;
     var thrustZ = Math.sin(rad) * force;
 
-    // RCS двигатели (боковые и тормозные)
     var rcsForce = 15; 
     var rcsX = 0, rcsZ = 0;
     
     if (state.fuel > 0) {
-      // Поворот влево/вправо (используем боковую тягу)
       if (rcsLeft || keys.left) {
         state.heading = (state.heading - 90 * dt) % 360;
         if (state.heading < 0) state.heading += 360;
-        rcsX += -Math.sin(rad) * rcsForce; // Толкаем вбок
+        rcsX += -Math.sin(rad) * rcsForce;
         rcsZ += Math.cos(rad) * rcsForce;
         state.fuel -= rcsForce * dt * 0.1;
       }
@@ -250,7 +240,6 @@
         rcsZ += -Math.cos(rad) * rcsForce;
         state.fuel -= rcsForce * dt * 0.1;
       }
-      // Торможение (толкаем назад)
       if (rcsDown || keys.down) {
         rcsX += -Math.cos(rad) * rcsForce;
         rcsZ += -Math.sin(rad) * rcsForce;
@@ -294,9 +283,9 @@
         }
       }
       if (hitZone) {
-        endGame("won", "Мягкая посадка!", "Вы прилунились на площадку №" + hitZone.id + ". Скорость: " + speed.toFixed(1));
+        endGame("won", "Мягкая посадка!", "Вы прилунились на полосу №" + hitZone.id + ". Скорость: " + speed.toFixed(1));
       } else {
-        endGame("lost", "Посадка вне зоны", "Вы коснулись Луны, но не попали в синюю посадочную зону.");
+        endGame("lost", "Посадка вне зоны", "Вы коснулись Луны, но не попали в синюю посадочную полосу.");
       }
       return;
     }
@@ -367,13 +356,13 @@
     return v3(m.x + zone.dir.x * m.r, m.y + zone.dir.y * m.r, m.z + zone.dir.z * m.r);
   }
 
-  // Отрисовка синей дуги (посадочной зоны)
+  // Отрисовка пояса (длинной полосы)
   function drawZone(zone) {
     var m = WORLD.moon;
     var centerW = zoneCenterWorld(zone);
     
-    // Вычисляем базис для дуги
-    var n = zone.dir; // Нормаль
+    // Находим векторы, перпендикулярные нормали пояса (чтобы нарисовать длинную полосу вдоль экватора)
+    var n = zone.dir;
     var t1 = v3(1, 0, 0);
     if (Math.abs(n.x) > 0.9) t1 = v3(0, 1, 0);
     
@@ -391,27 +380,26 @@
       t2.x * n.y - t2.y * n.x
     );
 
-    // Строим дугу в 3D и проецируем
-    var points = [];
-    var segments = 20;
-    var arcRadius = zone.radius;
-    
-    for (var j = 0; j <= segments; j++) {
-      var angle = (j / segments) * Math.PI * 2; // Полный круг (или часть)
-      // Координаты на поверхности сферы
-      var px = Math.cos(angle) * arcRadius;
-      var py = Math.sin(angle) * arcRadius;
-      
-      // Точка в 3D на сфере вокруг центра
-      var wx = m.x + m.r * (n.x * Math.cos(arcRadius) + (t1f.x * px + t2.x * py) * Math.sin(arcRadius));
-      var wy = m.y + m.r * (n.y * Math.cos(arcRadius) + (t1f.y * px + t2.y * py) * Math.sin(arcRadius));
-      var wz = m.z + m.r * (n.z * Math.cos(arcRadius) + (t1f.z * px + t2.z * py) * Math.sin(arcRadius));
-      
-      var proj = project(v3(wx, wy, wz));
-      if (proj) points.push(proj);
+    // Строим две линии: верхнюю и нижнюю границу пояса (по широте)
+    var lines = [];
+    for (var side = -1; side <= 1; side += 2) {
+      var arcPoints = [];
+      // Идем по долготе (0 до 2ПИ), чтобы нарисовать длинную полосу вокруг всей Луны
+      for (var j = 0; j <= 36; j++) {
+        var lon = (j / 36) * Math.PI * 2;
+        
+        // Точка на поверхности сферы на заданной широте (zone.width)
+        var lat = zone.width * side;
+        
+        var wx = m.x + m.r * (n.x * Math.cos(lat) + (t1f.x * Math.cos(lon) + t2.x * Math.sin(lon)) * Math.sin(lat));
+        var wy = m.y + m.r * (n.y * Math.cos(lat) + (t1f.y * Math.cos(lon) + t2.y * Math.sin(lon)) * Math.sin(lat));
+        var wz = m.z + m.r * (n.z * Math.cos(lat) + (t1f.z * Math.cos(lon) + t2.z * Math.sin(lon)) * Math.sin(lat));
+        
+        var proj = project(v3(wx, wy, wz));
+        if (proj) arcPoints.push(proj);
+      }
+      lines.push(arcPoints);
     }
-
-    if (points.length < 2) return;
 
     var c = centerW;
     var toCam = v3(camera.target.x - c.x, camera.target.y - c.y, camera.target.z - c.z);
@@ -420,23 +408,24 @@
     var facing = toCam.x*n.x + toCam.y*n.y + toCam.z*n.z;
     var alpha = Math.max(0.15, Math.min(1, (facing + 0.3) / 1.3));
 
-    // Рисуем линию (дугу)
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    for (var k = 1; k < points.length; k++) {
-      ctx.lineTo(points[k].x, points[k].y);
-    }
-    
-    // Отрисовка (синий цвет, как на твоем рисунке)
+    // Рисуем две линии пояса
     ctx.strokeStyle = "rgba(80, 180, 255, " + alpha + ")";
     ctx.lineWidth = 4;
-    ctx.stroke();
     
-    // Легкая заливка внутри
-    ctx.fillStyle = "rgba(80, 180, 255, " + (alpha * 0.15) + ")";
-    ctx.fill();
+    for (var l = 0; l < lines.length; l++) {
+      var pts = lines[l];
+      if (pts.length < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (var k = 1; k < pts.length; k++) {
+        // Если точка за камерой, прерываем линию (грубая обработка)
+        if (pts[k].depth > camera.distance) { ctx.moveTo(pts[k].x, pts[k].y); continue; }
+        ctx.lineTo(pts[k].x, pts[k].y);
+      }
+      ctx.stroke();
+    }
 
-    // Номер зоны
+    // Рисуем номер зоны в центре пояса
     var labelP = project(centerW);
     if (labelP) {
       ctx.fillStyle = "rgba(255, 255, 255, " + alpha + ")";
@@ -471,12 +460,10 @@
 
     ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(drawAng);
     
-    // Пламя маршевого двигателя
     if (engineThrusting && state.fuel > 0) {
       ctx.beginPath(); ctx.moveTo(-size*1.5, size*0.5); ctx.lineTo(-size*2.5, 0); ctx.lineTo(-size*1.5, -size*0.5);
       ctx.fillStyle = "#ff9e4e"; ctx.fill();
     }
-    // Пламя RCS (торможение)
     if ((rcsDown || keys.down) && state.fuel > 0) {
       ctx.beginPath(); ctx.moveTo(size*1.5, size*0.5); ctx.lineTo(size*2.5, 0); ctx.lineTo(size*1.5, -size*0.5);
       ctx.fillStyle = "#4ea1ff"; ctx.fill();
@@ -524,14 +511,12 @@
 
   fuelSlider.addEventListener("input", function() { fuelValue.textContent = fuelSlider.value; });
 
-  // Маршевый двигатель
   burnBtn.addEventListener("mousedown", function() { if(state && state.status==="flying" && state.fuel>0) engineThrusting = true; });
   burnBtn.addEventListener("mouseup", function() { engineThrusting = false; });
   burnBtn.addEventListener("mouseleave", function() { engineThrusting = false; });
   burnBtn.addEventListener("touchstart", function(e) { e.preventDefault(); if(state && state.status==="flying" && state.fuel>0) engineThrusting = true; });
   burnBtn.addEventListener("touchend", function(e) { e.preventDefault(); engineThrusting = false; });
 
-  // RCS кнопки
   function bindHold(btn, on, off) {
     btn.addEventListener("mousedown", function() { if(state && state.status==="flying" && state.fuel>0) on(); });
     btn.addEventListener("mouseup", off);
@@ -547,7 +532,6 @@
   resetBtn.addEventListener("click", resetGame);
   restartBtn.addEventListener("click", resetGame);
 
-  // Клавиатура (W, A, S, D и стрелки)
   document.addEventListener("keydown", function (e) {
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " ", "Spacebar", "w", "a", "s", "d", "W", "A", "S", "D"].includes(e.key)) {
       e.preventDefault();
