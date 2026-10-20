@@ -10,12 +10,15 @@
   var hudBurns = document.getElementById("hud-burns");
   var hudTarget = document.getElementById("hud-target");
 
+  // Получаем элементы управления
   var powerInput = document.getElementById("power");
   var azimuthInput = document.getElementById("azimuth");
-  var elevationInput = document.getElementById("elevation");
   var powerValue = document.getElementById("power-value");
   var azimuthValue = document.getElementById("azimuth-value");
-  var elevationValue = document.getElementById("elevation-value");
+  
+  // Скрываем ползунок возвышения, так как управляем только в плоскости
+  var elevationRow = document.getElementById("elevation").parentElement;
+  if (elevationRow) elevationRow.style.display = "none";
 
   var startBtn = document.getElementById("start-btn");
   var burnBtn = document.getElementById("burn-btn");
@@ -92,7 +95,6 @@
     var rz2 = ry * sinP + rz * cosP;
 
     var camZ = rz2 + camera.distance;
-
     if (camZ <= 1) return null;
 
     var w = canvas.clientWidth;
@@ -107,15 +109,9 @@
 
   // ---------- Векторные операции ----------
   function v3(x, y, z) { return { x: x, y: y, z: z }; }
-
-  function length(v) {
-    return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-  }
-
+  function length(v) { return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
   function dist(a, b) {
-    var dx = a.x - b.x;
-    var dy = a.y - b.y;
-    var dz = a.z - b.z;
+    var dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
     return Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
 
@@ -126,28 +122,20 @@
       var u = Math.random() * 2 - 1;
       var phi = Math.random() * Math.PI * 2;
       var theta = Math.acos(u);
-
       if (theta < 0.35) theta = 0.35 + Math.random() * 0.2;
       if (theta > Math.PI - 0.35) theta = Math.PI - 0.35 - Math.random() * 0.2;
 
       var dx = Math.sin(theta) * Math.cos(phi);
       var dy = Math.cos(theta);
       var dz = Math.sin(theta) * Math.sin(phi);
-
-      zones.push({
-        dir: v3(dx, dy, dz),
-        r: 0.28 + Math.random() * 0.12,
-        id: i + 1
-      });
+      zones.push({ dir: v3(dx, dy, dz), r: 0.28 + Math.random() * 0.12, id: i + 1 });
     }
     zones.sort(function (a, b) { return a.id - b.id; });
     return zones;
   }
 
   function insideZone(point, moon, zone) {
-    var dx = point.x - moon.x;
-    var dy = point.y - moon.y;
-    var dz = point.z - moon.z;
+    var dx = point.x - moon.x, dy = point.y - moon.y, dz = point.z - moon.z;
     var len = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (len === 0) return false;
     dx /= len; dy /= len; dz /= len;
@@ -159,8 +147,7 @@
 
   // ---------- Стартовое состояние ----------
   function resetState() {
-    var e = WORLD.earth;
-    var m = WORLD.moon;
+    var e = WORLD.earth, m = WORLD.moon;
 
     var dirToMoon = v3(m.x - e.x, m.y - e.y, m.z - e.z);
     var len = length(dirToMoon);
@@ -187,17 +174,12 @@
         vy: tangent.y * START_SPEED,
         vz: tangent.z * START_SPEED
       },
-      time: 0,
-      dv: 0,
-      burnsLeft: MAX_BURNS,
-      trail: [v3(sx, sy, sz)],
-      status: "idle",
+      time: 0, dv: 0, burnsLeft: MAX_BURNS,
+      trail: [v3(sx, sy, sz)], status: "idle",
       zones: randomLandingZones(3)
     };
 
-    running = false;
-    accumulatedTime = 0;
-    lastTimestamp = 0;
+    running = false; accumulatedTime = 0; lastTimestamp = 0;
 
     hudTarget.textContent = "1–3";
     updateHud();
@@ -226,10 +208,8 @@
     startBtn.disabled = flying || finished;
     burnBtn.disabled = !flying || state.burnsLeft <= 0;
     resetBtn.disabled = false;
-
-    powerInput.disabled = finished;
-    azimuthInput.disabled = finished;
-    elevationInput.disabled = finished;
+    
+    // Не блокируем ползунки, чтобы можно было настраивать импульс в полёте
   }
 
   function showMessage(title, text) {
@@ -244,24 +224,19 @@
 
   // ---------- Физика ----------
   function accelAt(p) {
-    var e = WORLD.earth;
-    var m = WORLD.moon;
+    var e = WORLD.earth, m = WORLD.moon;
 
     var dxE = e.x - p.x, dyE = e.y - p.y, dzE = e.z - p.z;
     var dE2 = dxE * dxE + dyE * dyE + dzE * dzE;
     var dE = Math.sqrt(dE2) || 1;
     var aE = G_EARTH / dE2;
-    var axE = aE * (dxE / dE);
-    var ayE = aE * (dyE / dE);
-    var azE = aE * (dzE / dE);
+    var axE = aE * (dxE / dE), ayE = aE * (dyE / dE), azE = aE * (dzE / dE);
 
     var dxM = m.x - p.x, dyM = m.y - p.y, dzM = m.z - p.z;
     var dM2 = dxM * dxM + dyM * dyM + dzM * dzM;
     var dM = Math.sqrt(dM2) || 1;
     var aM = G_MOON / dM2;
-    var axM = aM * (dxM / dM);
-    var ayM = aM * (dyM / dM);
-    var azM = aM * (dzM / dM);
+    var axM = aM * (dxM / dM), ayM = aM * (dyM / dM), azM = aM * (dzM / dM);
 
     return { ax: axE + axM, ay: ayE + ayM, az: azE + azM };
   }
@@ -270,23 +245,16 @@
     var s = state.ship;
     var a = accelAt(s);
 
-    s.vx += a.ax * dt;
-    s.vy += a.ay * dt;
-    s.vz += a.az * dt;
-    s.x += s.vx * dt;
-    s.y += s.vy * dt;
-    s.z += s.vz * dt;
-
+    s.vx += a.ax * dt; s.vy += a.ay * dt; s.vz += a.az * dt;
+    s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
     state.time += dt;
 
-    var trail = state.trail;
-    var last = trail[trail.length - 1];
+    var trail = state.trail, last = trail[trail.length - 1];
     var dx = s.x - last.x, dy = s.y - last.y, dz = s.z - last.z;
     if (dx * dx + dy * dy + dz * dz > 4) {
       trail.push(v3(s.x, s.y, s.z));
       if (trail.length > 2500) trail.shift();
     }
-
     checkEndConditions();
   }
 
@@ -302,76 +270,58 @@
       var hitZone = null;
       for (var i = 0; i < state.zones.length; i++) {
         if (insideZone(s, WORLD.moon, state.zones[i])) {
-          hitZone = state.zones[i];
-          break;
+          hitZone = state.zones[i]; break;
         }
       }
       if (hitZone) {
-        endGame("won", "Успешная посадка!",
-          "Попал в зону №" + hitZone.id + ". Время: " + state.time.toFixed(1) +
-          " с, ΔV: " + state.dv.toFixed(1));
+        endGame("won", "Успешная посадка!", "Попал в зону №" + hitZone.id + ". Время: " + state.time.toFixed(1) + " с, ΔV: " + state.dv.toFixed(1));
       } else {
-        endGame("lost", "Жёсткая посадка мимо зоны",
-          "Аппарат коснулся Луны, но не в отмеченной зоне.");
+        endGame("lost", "Жёсткая посадка мимо зоны", "Аппарат коснулся Луны вне отмеченной зоны.");
       }
       return;
     }
 
-    var shipR = Math.sqrt(s.x * s.x + s.y * s.y + s.z * s.z);
-    if (shipR > 2500) {
+    if (Math.sqrt(s.x * s.x + s.y * s.y + s.z * s.z) > 2500) {
       endGame("lost", "Аппарат улетел в открытый космос", "Импульс оказался слишком сильным.");
       return;
     }
 
     if (state.time >= MAX_TIME) {
       endGame("lost", "Время вышло", "Не удалось достичь Луны за отведённое время.");
-      return;
     }
   }
 
   function endGame(status, title, text) {
-    state.status = status;
-    running = false;
-    updateButtons();
-    updateHud();
-    showMessage(title, text);
-    render();
+    state.status = status; running = false;
+    updateButtons(); updateHud();
+    showMessage(title, text); render();
   }
 
   // ---------- Отрисовка ----------
   function render() {
-    var w = canvas.clientWidth;
-    var h = canvas.clientHeight;
-
+    var w = canvas.clientWidth, h = canvas.clientHeight;
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "#05060a";
-    ctx.fillRect(0, 0, w, h);
-
+    ctx.fillStyle = "#05060a"; ctx.fillRect(0, 0, w, h);
     drawStars();
 
     if (!state) return;
 
-    var drawables = [];
-
-    drawables.push({ kind: "sphere", body: WORLD.earth, color1: "#2b6fd6", color2: "#1a4a94", label: "Земля" });
-    drawables.push({ kind: "sphere", body: WORLD.moon,  color1: "#9aa4b8", color2: "#6a7386", label: "Луна" });
+    var drawables = [
+      { kind: "sphere", body: WORLD.earth, color1: "#2b6fd6", color2: "#1a4a94", label: "Земля" },
+      { kind: "sphere", body: WORLD.moon,  color1: "#9aa4b8", color2: "#6a7386", label: "Луна" }
+    ];
 
     for (var i = 0; i < state.zones.length; i++) {
       drawables.push({ kind: "zone", zone: state.zones[i] });
     }
 
+    drawPredictionTrail(); // Рисуем предсказание до реальной траектории
     drawTrail();
 
     for (var j = 0; j < drawables.length; j++) {
       var d = drawables[j];
-      if (d.kind === "sphere") {
-        var c = project(d.body);
-        d.depth = c ? c.depth : Infinity;
-      } else if (d.kind === "zone") {
-        var zc = zoneCenterWorld(d.zone);
-        var pz = project(zc);
-        d.depth = pz ? pz.depth : Infinity;
-      }
+      var c = (d.kind === "sphere") ? project(d.body) : project(zoneCenterWorld(d.zone));
+      d.depth = c ? c.depth : Infinity;
     }
     drawables.sort(function (a, b) { return b.depth - a.depth; });
 
@@ -387,71 +337,92 @@
   function drawStars() {
     ctx.fillStyle = "rgba(255,255,255,0.5)";
     for (var i = 0; i < 70; i++) {
-      var x = ((i * 137.5) % 1000) / 1000 * canvas.clientWidth;
-      var y = ((i * 91.7) % 700) / 700 * canvas.clientHeight;
-      ctx.fillRect(x, y, 1.5, 1.5);
+      ctx.fillRect(((i * 137.5) % 1000) / 1000 * canvas.clientWidth, ((i * 91.7) % 700) / 700 * canvas.clientHeight, 1.5, 1.5);
     }
   }
 
   function drawSphere(body, color1, color2, label) {
-    var p = project(body);
-    if (!p) return;
-
-    var r = body.r * p.scale;
-    if (r < 1) return;
+    var p = project(body); if (!p) return;
+    var r = body.r * p.scale; if (r < 1) return;
 
     var grad = ctx.createRadialGradient(p.x - r * 0.3, p.y - r * 0.3, r * 0.1, p.x, p.y, r);
-    grad.addColorStop(0, color1);
-    grad.addColorStop(1, color2);
-
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.fillStyle = grad;
-    ctx.fill();
+    grad.addColorStop(0, color1); grad.addColorStop(1, color2);
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = grad; ctx.fill();
 
     ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.font = "12px system-ui, sans-serif";
-    ctx.textAlign = "center";
+    ctx.font = "12px system-ui, sans-serif"; ctx.textAlign = "center";
     ctx.fillText(label, p.x, p.y + r + 16);
   }
 
   function zoneCenterWorld(zone) {
     var m = WORLD.moon;
-    return v3(
-      m.x + zone.dir.x * m.r,
-      m.y + zone.dir.y * m.r,
-      m.z + zone.dir.z * m.r
-    );
+    return v3(m.x + zone.dir.x * m.r, m.y + zone.dir.y * m.r, m.z + zone.dir.z * m.r);
   }
 
   function drawZone(zone) {
-    var m = WORLD.moon;
-    var center = project(zoneCenterWorld(zone));
+    var m = WORLD.moon, center = project(zoneCenterWorld(zone));
     if (!center) return;
 
-    var rScreen = m.r * center.scale * Math.sin(zone.r);
-    if (rScreen < 2) return;
-
+    var rScreen = m.r * center.scale * Math.sin(zone.r); if (rScreen < 2) return;
     var c = zoneCenterWorld(zone);
     var toCam = v3(camera.target.x - c.x, camera.target.y - c.y, camera.target.z - c.z);
     var len = length(toCam) || 1;
     toCam.x /= len; toCam.y /= len; toCam.z /= len;
-    var facing = toCam.x * zone.dir.x + toCam.y * zone.dir.y + toCam.z * zone.dir.z;
+    var alpha = Math.max(0.15, Math.min(1, ((toCam.x*zone.dir.x + toCam.y*zone.dir.y + toCam.z*zone.dir.z) + 0.3) / 1.3));
 
-    var alpha = Math.max(0.15, Math.min(1, (facing + 0.3) / 1.3));
+    ctx.beginPath(); ctx.arc(center.x, center.y, rScreen, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 215, 106, " + (alpha * 0.35) + ")"; ctx.fill();
+    ctx.strokeStyle = "rgba(255, 215, 106, " + alpha + ")"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = "rgba(255, 215, 106, " + alpha + ")";
+    ctx.font = "bold 12px system-ui, sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(String(zone.id), center.x, center.y + 4);
+  }
+
+  // Рисуем примерную траекторию (пунктир)
+  function drawPredictionTrail() {
+    if (!state || state.status !== "flying") return;
+
+    var power = parseFloat(powerInput.value);
+    var azRad = parseFloat(azimuthInput.value) * Math.PI / 180;
+    var dv = power * BURN_STRENGTH;
+
+    // Вектор гипотетического импульса (только по осям X и Z, для наглядности)
+    var pvx = Math.cos(azRad) * dv;
+    var pvy = 0; 
+    var pvz = Math.sin(azRad) * dv;
+
+    var sim = {
+      x: state.ship.x, y: state.ship.y, z: state.ship.z,
+      vx: state.ship.vx + pvx, vy: state.ship.vy + pvy, vz: state.ship.vz + pvz
+    };
+
+    var points = [];
+    var simDt = 1 / 30; // Шаг для симуляции
+    for (var i = 0; i < 80; i++) {
+      var a = accelAt(sim);
+      sim.vx += a.ax * simDt; sim.vy += a.ay * simDt; sim.vz += a.az * simDt;
+      sim.x += sim.vx * simDt; sim.y += sim.vy * simDt; sim.z += sim.vz * simDt;
+      
+      points.push(v3(sim.x, sim.y, sim.z));
+
+      // Если предсказанная траектория врезалась в Землю или Луну, прекращаем
+      if (dist(sim, WORLD.earth) <= WORLD.earth.r || dist(sim, WORLD.moon) <= WORLD.moon.r) break;
+    }
 
     ctx.beginPath();
-    ctx.arc(center.x, center.y, rScreen, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255, 215, 106, " + (alpha * 0.35) + ")";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255, 215, 106, " + alpha + ")";
-    ctx.lineWidth = 2;
+    var started = false;
+    for (var j = 0; j < points.length; j++) {
+      var p = project(points[j]);
+      if (!p) { started = false; continue; }
+      if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+      else ctx.lineTo(p.x, p.y);
+    }
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+    ctx.lineWidth = 1.5;
     ctx.stroke();
-
-    ctx.fillStyle = "rgba(255, 215, 106, " + alpha + ")";
-    ctx.font = "bold 12px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(String(zone.id), center.x, center.y + 4);
+    ctx.setLineDash([]); // Сбрасываем обратно
   }
 
   function drawTrail() {
@@ -470,130 +441,100 @@
   }
 
   function drawShip() {
-    var p = project(state.ship);
-    if (!p) return;
-
+    var p = project(state.ship); if (!p) return;
     var size = Math.max(4, Math.min(14, 10 * p.scale));
-
     var s = state.ship;
     var sp = Math.sqrt(s.vx * s.vx + s.vy * s.vy + s.vz * s.vz) || 1;
     var ahead = v3(s.x + (s.vx / sp) * 10, s.y + (s.vy / sp) * 10, s.z + (s.vz / sp) * 10);
     var pa = project(ahead);
+    var ang = pa ? Math.atan2(pa.y - p.y, pa.x - p.x) : 0;
 
-    var ang = 0;
-    if (pa) {
-      ang = Math.atan2(pa.y - p.y, pa.x - p.x);
-    }
-
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(ang);
-
-    ctx.beginPath();
-    ctx.moveTo(size * 1.6, 0);
-    ctx.lineTo(-size, size * 0.9);
-    ctx.lineTo(-size, -size * 0.9);
-    ctx.closePath();
-    ctx.fillStyle = "#ffffff";
-    ctx.fill();
-
-    ctx.restore();
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
+    ctx.beginPath(); ctx.moveTo(size * 1.6, 0); ctx.lineTo(-size, size * 0.9); ctx.lineTo(-size, -size * 0.9); ctx.closePath();
+    ctx.fillStyle = "#ffffff"; ctx.fill(); ctx.restore();
   }
 
   // ---------- Игровой цикл ----------
   function loop(timestamp) {
     if (!lastTimestamp) lastTimestamp = timestamp;
     var dt = (timestamp - lastTimestamp) / 1000;
-    lastTimestamp = timestamp;
-    if (dt > 0.1) dt = 0.1;
+    lastTimestamp = timestamp; if (dt > 0.1) dt = 0.1;
 
     if (running && state && state.status === "flying") {
       accumulatedTime += dt;
       while (accumulatedTime >= STEP) {
-        stepPhysics(STEP);
-        accumulatedTime -= STEP;
+        stepPhysics(STEP); accumulatedTime -= STEP;
         if (!running || state.status !== "flying") break;
       }
       updateHud();
     }
-
     render();
     requestAnimationFrame(loop);
   }
 
   // ---------- Управление ----------
   function startFlight() {
-    if (!state || state.status === "flying") return;
-    if (state.status === "won" || state.status === "lost") return;
-
-    state.status = "flying";
-    running = true;
-    lastTimestamp = 0;
-    accumulatedTime = 0;
-    hideMessage();
-    updateButtons();
+    if (!state || state.status === "flying" || state.status === "won" || state.status === "lost") return;
+    state.status = "flying"; running = true; lastTimestamp = 0; accumulatedTime = 0;
+    hideMessage(); updateButtons();
   }
 
   function applyBurn() {
-    if (!state || state.status !== "flying") return;
-    if (state.burnsLeft <= 0) return;
+    if (!state || state.status !== "flying" || state.burnsLeft <= 0) return;
 
     var power = parseFloat(powerInput.value);
-    var azDeg = parseFloat(azimuthInput.value);
-    var elDeg = parseFloat(elevationInput.value);
-    
-    var azRad = azDeg * Math.PI / 180;
-    var elRad = elDeg * Math.PI / 180;
-
+    var azRad = parseFloat(azimuthInput.value) * Math.PI / 180;
     var dv = power * BURN_STRENGTH;
 
-    // Вектор импульса с учётом азимута и возвышения
-    var vx = Math.cos(elRad) * Math.cos(azRad) * dv;
-    var vy = Math.sin(elRad) * dv;
-    var vz = Math.cos(elRad) * Math.sin(azRad) * dv;
+    // Применяем импульс строго в плоскости X-Z (без изменения Y, чтобы не улететь случайно)
+    state.ship.vx += Math.cos(azRad) * dv;
+    state.ship.vz += Math.sin(azRad) * dv;
 
-    state.ship.vx += vx;
-    state.ship.vy += vy;
-    state.ship.vz += vz;
-
-    state.dv += dv;
-    state.burnsLeft -= 1;
-
-    updateHud();
-    updateButtons();
+    state.dv += dv; state.burnsLeft -= 1;
+    updateHud(); updateButtons();
   }
 
-  function resetGame() {
-    resetState();
-    render();
-  }
+  function resetGame() { resetState(); render(); }
 
   // ---------- Обработчики ----------
-  powerInput.addEventListener("input", function () {
-    powerValue.textContent = powerInput.value;
-  });
-  azimuthInput.addEventListener("input", function () {
-    azimuthValue.textContent = azimuthInput.value + "°";
-  });
-  elevationInput.addEventListener("input", function () {
-    elevationValue.textContent = elevationInput.value + "°";
-  });
+  powerInput.addEventListener("input", function () { powerValue.textContent = powerInput.value; });
+  azimuthInput.addEventListener("input", function () { azimuthValue.textContent = azimuthInput.value + "°"; });
 
   startBtn.addEventListener("click", startFlight);
   burnBtn.addEventListener("click", applyBurn);
   resetBtn.addEventListener("click", resetGame);
   restartBtn.addEventListener("click", resetGame);
 
-  // Обработка клавиатуры
+  // Обработка клавиатуры: стрелки меняют ползунки
   document.addEventListener("keydown", function (e) {
-    if (state && state.status === "flying") {
-      if (e.key === " " || e.key === "Spacebar") {
-        applyBurn();
-        e.preventDefault();
-      }
+    // Предотвращаем скролл страницы стрелками
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
+      e.preventDefault();
+    }
+
+    var step = e.shiftKey ? 5 : 1; // С зажатым Shift меняем быстрее
+
+    if (e.key === "ArrowUp") {
+      powerInput.value = Math.min(100, parseInt(powerInput.value, 10) + step);
+      powerValue.textContent = powerInput.value;
+    } else if (e.key === "ArrowDown") {
+      powerInput.value = Math.max(0, parseInt(powerInput.value, 10) - step);
+      powerValue.textContent = powerInput.value;
+    } else if (e.key === "ArrowRight") {
+      var az = parseInt(azimuthInput.value, 10) + step;
+      if (az >= 360) az -= 360;
+      azimuthInput.value = az;
+      azimuthValue.textContent = az + "°";
+    } else if (e.key === "ArrowLeft") {
+      var az2 = parseInt(azimuthInput.value, 10) - step;
+      if (az2 < 0) az2 += 360;
+      azimuthInput.value = az2;
+      azimuthValue.textContent = az2 + "°";
+    } else if (e.key === " " || e.key === "Spacebar") {
+      applyBurn();
     } else if (e.key === "Enter") {
       if (state && state.status === "idle") startFlight();
-      else resetGame();
+      else if (state && (state.status === "won" || state.status === "lost")) resetGame();
     }
   });
 
