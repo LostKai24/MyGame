@@ -11,7 +11,7 @@
     <header id="hud">
       <div class="hud-item"><span class="hud-label">Время</span><span id="hud-time">0.0 с</span></div>
       <div class="hud-item"><span class="hud-label">Скорость</span><span id="hud-speed">0.0</span></div>
-      <div class="hud-item"><span class="hud-label">Топливо (ΔV)</span><span id="hud-dv">100.0</span></div>
+      <div class="hud-item"><span class="hud-label">Топливо</span><span id="hud-fuel">100.0</span></div>
       <div class="hud-item"><span class="hud-label">Цель</span><span id="hud-target">1–3</span></div>
     </header>
 
@@ -19,19 +19,27 @@
       <canvas id="canvas"></canvas>
       <div id="message" class="hidden">
         <h2 id="message-title">Готов?</h2>
-        <p id="message-text">Выбери двигатель, нажми «Старт» и используй стрелки для полёта.</p>
+        <p id="message-text">Выбери двигатель и топливо, затем нажми «Старт».</p>
         <button id="restart-btn" type="button">Заново</button>
       </div>
     </div>
 
     <footer id="controls">
-      <div class="control-row engine-row">
+      <!-- Выбор двигателя -->
+      <div class="control-row">
         <span class="label">Двигатель:</span>
-        <div class="engine-buttons">
-          <button id="engine-1" class="engine-btn active" type="button">Малый<br><small>V=10</small></button>
-          <button id="engine-2" class="engine-btn" type="button">Средний<br><small>V=25</small></button>
-          <button id="engine-3" class="engine-btn" type="button">Тяжёлый<br><small>V=50</small></button>
+        <div class="engine-buttons" id="engine-container">
+          <button class="engine-btn" data-idx="0" type="button">Малый<br><small>10</small></button>
+          <button class="engine-btn active" data-idx="1" type="button">Средний<br><small>25</small></button>
+          <button class="engine-btn" data-idx="2" type="button">Тяжёлый<br><small>50</small></button>
         </div>
+      </div>
+      
+      <!-- Выбор топлива -->
+      <div class="control-row">
+        <label for="fuel-slider">Топливо</label>
+        <input id="fuel-slider" type="range" min="10" max="1000" value="100" step="10">
+        <span id="fuel-value">100</span>
       </div>
 
       <div class="button-row">
