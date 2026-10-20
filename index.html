@@ -12,7 +12,7 @@
       <div class="hud-item"><span class="hud-label">Время</span><span id="hud-time">0.0 с</span></div>
       <div class="hud-item"><span class="hud-label">Скорость</span><span id="hud-speed">0.0</span></div>
       <div class="hud-item"><span class="hud-label">Топливо</span><span id="hud-fuel">100.0</span></div>
-      <div class="hud-item"><span class="hud-label">Цель</span><span id="hud-target">1–3</span></div>
+      <div class="hud-item"><span class="hud-label">Цель</span><span id="hud-target">1–2</span></div>
     </header>
 
     <div id="canvas-wrap">
@@ -27,7 +27,7 @@
     <footer id="controls">
       <!-- Выбор двигателя -->
       <div class="control-row">
-        <span class="label">Двигатель:</span>
+        <span class="label">Марш. двиг:</span>
         <div class="engine-buttons" id="engine-container">
           <button class="engine-btn" data-idx="0" type="button">Малый<br><small>10</small></button>
           <button class="engine-btn active" data-idx="1" type="button">Средний<br><small>25</small></button>
@@ -42,10 +42,16 @@
         <span id="fuel-value">100</span>
       </div>
 
+      <!-- Управление -->
       <div class="button-row">
         <button id="start-btn" type="button">Старт</button>
-        <button id="burn-btn" type="button">Тяга</button>
+        <button id="burn-btn" type="button">Тяга (W)</button>
         <button id="reset-btn" type="button">Сброс</button>
+      </div>
+      <div class="button-row rcs-row">
+        <button id="rcs-left" class="rcs-btn" type="button">◀ RCS (A)</button>
+        <button id="rcs-down" class="rcs-btn" type="button">▼ Тормоз (S)</button>
+        <button id="rcs-right" class="rcs-btn" type="button">RCS ▶ (D)</button>
       </div>
     </footer>
   </div>
