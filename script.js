@@ -6,10 +6,14 @@
 
   var hudTime = document.getElementById("hud-time");
   var hudSpeed = document.getElementById("hud-speed");
-  var hudDv = document.getElementById("hud-dv");
+  var hudFuel = document.getElementById("hud-fuel");
   var hudTarget = document.getElementById("hud-target");
 
-  var engineBtns = [document.getElementById("engine-1"), document.getElementById("engine-2"), document.getElementById("engine-3")];
+  var engineContainer = document.getElementById("engine-container");
+  var engineBtns = engineContainer.querySelectorAll(".engine-btn");
+  var fuelSlider = document.getElementById("fuel-slider");
+  var fuelValue = document.getElementById("fuel-value");
+
   var startBtn = document.getElementById("start-btn");
   var burnBtn = document.getElementById("burn-btn");
   var resetBtn = document.getElementById("reset-btn");
@@ -19,7 +23,6 @@
   var messageTitle = document.getElementById("message-title");
   var messageText = document.getElementById("message-text");
 
-  // ---------- Мир 3D ----------
   var WORLD = {
     earth: { x: -220, y: -40, z: -60, r: 70 },
     moon:  { x:  260, y:  70, z:  40, r: 45 }
@@ -32,11 +35,11 @@
   var MAX_TIME = 300;
 
   var ENGINES = [
-    { force: 10 },
-    { force: 25 },
-    { force: 50 }
+    { name: "Малый", force: 10 },
+    { name: "Средний", force: 25 },
+    { name: "Тяжёлый", force: 50 }
   ];
-  var currentEngine = 0;
+  var currentEngine = 1; // По умолчанию средний
 
   var camera = { yaw: 0.6, pitch: 0.25, distance: 900, target: { x: 20, y: 10, z: -10 }, fov: 60 };
 
@@ -47,7 +50,7 @@
   var STEP = 1 / 120;
   
   var engineThrusting = false;
-  var keys = { up: false, down: false, left: false, right: false };
+  var keys = { left: false, right: false };
 
   function fitCanvas() {
     var wrap = canvas.parentElement;
@@ -78,6 +81,7 @@
   function length(v) { return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
   function dist(a, b) { return Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2 + (a.z-b.z)**2); }
 
+  // ---------- Зоны посадки (Полосы) ----------
   function randomLandingZones(count) {
     var zones = [];
     for (var i = 0; i < count; i++) {
@@ -87,24 +91,64 @@
       if (theta < 0.35) theta = 0.35 + Math.random() * 0.2;
       if (theta > Math.PI - 0.35) theta = Math.PI - 0.35 - Math.random() * 0.2;
 
+      // Центр полосы
       var dx = Math.sin(theta) * Math.cos(phi);
       var dy = Math.cos(theta);
       var dz = Math.sin(theta) * Math.sin(phi);
+      var dir = v3(dx, dy, dz);
+
+      // Случайное направление вдоль поверхности (касательная)
+      var tangent = v3(1, 0, 0);
+      if (Math.abs(dx) > 0.9) tangent = v3(0, 1, 0); // Если центр на оси X, берем Y
       
-      zones.push({ dir: v3(dx, dy, dz), r: 0.22 + Math.random() * 0.1, id: i + 1 });
+      // Нормализуем и создаем перпендикуляр (направление "длины" полосы)
+      var tLen = length(tangent);
+      tangent.x /= tLen; tangent.y /= tLen; tangent.z /= tLen;
+      
+      // Векторное произведение dir x tangent даст касательную к сфере
+      var stripDir = v3(
+        dy * tangent.z - dz * tangent.y,
+        dz * tangent.x - dx * tangent.z,
+        dx * tangent.y - dy * tangent.x
+      );
+      var sLen = length(stripDir);
+      stripDir.x /= sLen; stripDir.y /= sLen; stripDir.z /= sLen;
+
+      zones.push({ 
+        dir: dir, 
+        lengthDir: stripDir, 
+        rLen: 0.15 + Math.random() * 0.1, // Половинная длина полосы
+        rWid: 0.04 + Math.random() * 0.03, // Половинная ширина полосы
+        id: i + 1 
+      });
     }
     return zones;
   }
 
+  // Проверка: попали ли мы в плоскую зону (эллипс на поверхности)
   function checkLandedInZone(point, moon, zone) {
     var dx = point.x - moon.x, dy = point.y - moon.y, dz = point.z - moon.z;
     var len = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (len === 0) return false;
     dx /= len; dy /= len; dz /= len;
 
-    var dot = dx * zone.dir.x + dy * zone.dir.y + dz * zone.dir.z;
-    var angle = Math.acos(Math.max(-1, Math.min(1, dot)));
-    return angle <= zone.r;
+    // Проекция точки на плоскость, касательную к сфере в центре зоны
+    var dotC = dx * zone.dir.x + dy * zone.dir.y + dz * zone.dir.z;
+    var cx = zone.dir.x * dotC, cy = zone.dir.y * dotC, cz = zone.dir.z * dotC;
+
+    var vx = dx - cx, vy = dy - cy, vz = dz - cz; // Вектор от центра зоны к точке
+
+    // Длина вдоль полосы и поперек
+    var dLen = vx * zone.lengthDir.x + vy * zone.lengthDir.y + vz * zone.lengthDir.z;
+    
+    // Вектор ширины = нормаль x направление длины
+    var wDirX = zone.dir.y * zone.lengthDir.z - zone.dir.z * zone.lengthDir.y;
+    var wDirY = zone.dir.z * zone.lengthDir.x - zone.dir.x * zone.lengthDir.z;
+    var wDirZ = zone.dir.x * zone.lengthDir.y - zone.dir.y * zone.lengthDir.x;
+    var dWid = vx * wDirX + vy * wDirY + vz * wDirZ;
+
+    // Проверка на эллипс
+    return (dLen*dLen)/(zone.rLen*zone.rLen) + (dWid*dWid)/(zone.rWid*zone.rWid) <= 1;
   }
 
   function resetState() {
@@ -125,12 +169,14 @@
     var tlen = length(tangent) || 1;
     tangent.x /= tlen; tangent.y /= tlen; tangent.z /= tlen;
 
+    var startFuel = parseFloat(fuelSlider.value);
+
     state = {
       ship: { x: sx, y: sy, z: sz, vx: tangent.x * START_SPEED, vy: tangent.y * START_SPEED, vz: tangent.z * START_SPEED },
-      time: 0, fuel: 100.0,
+      time: 0, fuel: startFuel, maxFuel: startFuel,
       trail: [v3(sx, sy, sz)], status: "idle",
       zones: randomLandingZones(3),
-      heading: 90 // Угол поворота носа
+      heading: 90
     };
 
     running = false; accumulatedTime = 0; lastTimestamp = 0;
@@ -149,7 +195,7 @@
     if (!state) return;
     hudTime.textContent = state.time.toFixed(1) + " с";
     hudSpeed.textContent = shipSpeed().toFixed(1);
-    hudDv.textContent = Math.max(0, state.fuel).toFixed(1);
+    hudFuel.textContent = Math.max(0, state.fuel).toFixed(1);
   }
 
   function updateButtons() {
@@ -159,6 +205,10 @@
     startBtn.disabled = flying || finished;
     resetBtn.disabled = false;
     burnBtn.disabled = !flying || state.fuel <= 0;
+    
+    // Блокируем настройки в полете
+    fuelSlider.disabled = flying || finished;
+    engineBtns.forEach(b => b.disabled = flying || finished);
   }
 
   function showMessage(title, text) {
@@ -195,7 +245,6 @@
       if (state.fuel < 0) state.fuel = 0;
     }
 
-    // Тяга направлена туда, куда повернут нос (heading)
     var rad = state.heading * Math.PI / 180;
     var thrustX = Math.cos(rad) * force;
     var thrustZ = Math.sin(rad) * force;
@@ -230,9 +279,9 @@
         }
       }
       if (hitZone) {
-        endGame("won", "Успешная посадка!", "Вы прилунились в зону №" + hitZone.id + ". Остаток топлива: " + state.fuel.toFixed(1));
+        endGame("won", "Успешная посадка!", "Вы прилунились на полосу №" + hitZone.id + ". Остаток топлива: " + state.fuel.toFixed(1));
       } else {
-        endGame("lost", "Жёсткая посадка мимо зоны", "Аппарат коснулся Луны, но не на посадочной площадке.");
+        endGame("lost", "Жёсткая посадка", "Вы разбились о поверхность Луны вне посадочной полосы.");
       }
       return;
     }
@@ -250,6 +299,7 @@
     updateButtons(); updateHud(); showMessage(title, text); render();
   }
 
+  // ---------- Отрисовка ----------
   function render() {
     var w = canvas.clientWidth, h = canvas.clientHeight;
     ctx.clearRect(0, 0, w, h);
@@ -301,23 +351,73 @@
     return v3(m.x + zone.dir.x * m.r, m.y + zone.dir.y * m.r, m.z + zone.dir.z * m.r);
   }
 
+  // Рисуем полосу (эллипс)
   function drawZone(zone) {
     var m = WORLD.moon, center = project(zoneCenterWorld(zone));
     if (!center) return;
 
-    var rScreen = m.r * center.scale * Math.sin(zone.r); if (rScreen < 2) return;
+    // Центр полосы на экране
+    var cx = center.x, cy = center.y;
+
+    // Векторы длины и ширины на экране
     var c = zoneCenterWorld(zone);
+    
+    // Конец полосы вдоль lengthDir
+    var endLen = v3(
+      c.x + zone.lengthDir.x * m.r * zone.rLen,
+      c.y + zone.lengthDir.y * m.r * zone.rLen,
+      c.z + zone.lengthDir.z * m.r * zone.rLen
+    );
+    var pLen = project(endLen);
+    
+    // Конец полосы вдоль ширины
+    var wDirX = zone.dir.y * zone.lengthDir.z - zone.dir.z * zone.lengthDir.y;
+    var wDirY = zone.dir.z * zone.lengthDir.x - zone.dir.x * zone.lengthDir.z;
+    var wDirZ = zone.dir.x * zone.lengthDir.y - zone.dir.y * zone.lengthDir.x;
+    var endWid = v3(
+      c.x + wDirX * m.r * zone.rWid,
+      c.y + wDirY * m.r * zone.rWid,
+      c.z + wDirZ * m.r * zone.rWid
+    );
+    var pWid = project(endWid);
+
+    if (!pLen || !pWid) return;
+
+    var rx = Math.sqrt((pLen.x - cx)**2 + (pLen.y - cy)**2);
+    var ry = Math.sqrt((pWid.x - cx)**2 + (pWid.y - cy)**2);
+
+    // Угол поворота эллипса
+    var angle = Math.atan2(pLen.y - cy, pLen.x - cx);
+
     var toCam = v3(camera.target.x - c.x, camera.target.y - c.y, camera.target.z - c.z);
     var len = length(toCam) || 1;
     toCam.x /= len; toCam.y /= len; toCam.z /= len;
-    var alpha = Math.max(0.15, Math.min(1, ((toCam.x*zone.dir.x + toCam.y*zone.dir.y + toCam.z*zone.dir.z) + 0.3) / 1.3));
+    var facing = toCam.x*zone.dir.x + toCam.y*zone.dir.y + toCam.z*zone.dir.z;
+    var alpha = Math.max(0.15, Math.min(1, (facing + 0.3) / 1.3));
 
-    ctx.beginPath(); 
-    ctx.ellipse(center.x, center.y, rScreen, rScreen * Math.abs(Math.cos(camera.pitch)), 0, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255, 215, 106, " + (alpha * 0.35) + ")"; ctx.fill();
-    ctx.strokeStyle = "rgba(255, 215, 106, " + alpha + ")"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    
+    // Рисуем саму полосу
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    
+    // Заливка (имитация светящейся площадки)
+    ctx.fillStyle = "rgba(255, 215, 106, " + (alpha * 0.3) + ")";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 215, 106, " + alpha + ")";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Рисуем букву (номер полосы) в центре
     ctx.fillStyle = "rgba(255, 215, 106, " + alpha + ")";
-    ctx.font = "bold 12px system-ui"; ctx.textAlign = "center"; ctx.fillText(String(zone.id), center.x, center.y + 4);
+    ctx.font = "bold 12px system-ui";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(zone.id), 0, 0);
+    
+    ctx.restore();
   }
 
   function drawTrail() {
@@ -344,13 +444,11 @@
 
     ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(drawAng);
     
-    // Сопло (огонь), если есть тяга
     if (engineThrusting && state.fuel > 0) {
       ctx.beginPath(); ctx.moveTo(-size*1.5, size*0.5); ctx.lineTo(-size*2.5, 0); ctx.lineTo(-size*1.5, -size*0.5);
       ctx.fillStyle = "#ff9e4e"; ctx.fill();
     }
     
-    // Сам корабль
     ctx.beginPath(); ctx.moveTo(size*1.6, 0); ctx.lineTo(-size, size*0.9); ctx.lineTo(-size, -size*0.9); ctx.closePath();
     ctx.fillStyle = "#ffffff"; ctx.fill(); 
     ctx.restore();
@@ -362,7 +460,6 @@
     lastTimestamp = timestamp; if (dt > 0.1) dt = 0.1;
 
     if (running && state && state.status === "flying") {
-      // Поворот носа
       if (keys.left) {
         state.heading = (state.heading - 90 * dt) % 360;
         if (state.heading < 0) state.heading += 360;
@@ -390,19 +487,27 @@
 
   function resetGame() { resetState(); render(); }
 
-  engineBtns.forEach(function(btn, idx) {
+  // --- Обработчики интерфейса ---
+  
+  // Выбор двигателя
+  engineBtns.forEach(function(btn) {
     btn.addEventListener("click", function() {
       if (state && state.status === "flying") return;
-      currentEngine = idx;
-      engineBtns.forEach(function(b, i) { b.classList.toggle("active", i === idx); });
+      currentEngine = parseInt(btn.dataset.idx, 10);
+      engineBtns.forEach(function(b) { b.classList.remove("active"); });
+      btn.classList.add("active");
     });
   });
 
-  // Обработка кнопки Тяга (для мыши)
+  // Слайдер топлива
+  fuelSlider.addEventListener("input", function() {
+    fuelValue.textContent = fuelSlider.value;
+  });
+
+  // Кнопки тяги
   burnBtn.addEventListener("mousedown", function() { if(state && state.status==="flying" && state.fuel>0) engineThrusting = true; });
   burnBtn.addEventListener("mouseup", function() { engineThrusting = false; });
   burnBtn.addEventListener("mouseleave", function() { engineThrusting = false; });
-  // Обработка кнопки Тяга (для касаний)
   burnBtn.addEventListener("touchstart", function(e) { e.preventDefault(); if(state && state.status==="flying" && state.fuel>0) engineThrusting = true; });
   burnBtn.addEventListener("touchend", function(e) { e.preventDefault(); engineThrusting = false; });
 
@@ -410,7 +515,6 @@
   resetBtn.addEventListener("click", resetGame);
   restartBtn.addEventListener("click", resetGame);
 
-  // Обработка клавиатуры
   document.addEventListener("keydown", function (e) {
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " ", "Spacebar"].includes(e.key)) {
       e.preventDefault();
@@ -418,7 +522,6 @@
     if (e.key === "ArrowLeft") keys.left = true;
     if (e.key === "ArrowRight") keys.right = true;
     
-    // Тяга по пробелу или стрелке вверх
     if ((e.key === " " || e.key === "Spacebar" || e.key === "ArrowUp") && state && state.status === "flying" && state.fuel > 0) {
       engineThrusting = true;
     }
@@ -436,6 +539,9 @@
     }
   });
 
+  // Инициализация
+  fuelValue.textContent = fuelSlider.value;
+  engineBtns[1].classList.add("active"); // Средний по умолчанию
   fitCanvas();
   resetState();
   requestAnimationFrame(loop);
