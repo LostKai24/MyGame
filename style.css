@@ -23,11 +23,11 @@ html, body {
 #hud {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 12px;
+  gap: 6px 10px;
   padding: 8px 12px;
   background: #0d1224;
   border-bottom: 1px solid #1d2742;
-  font-size: 13px;
+  font-size: 12px;
   justify-content: space-between;
 }
 
@@ -35,7 +35,7 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  min-width: 60px;
+  min-width: 52px;
 }
 
 .hud-label {
@@ -45,7 +45,7 @@ html, body {
   letter-spacing: 0.5px;
 }
 
-#hud-time, #hud-speed, #hud-height, #hud-fuel {
+#hud-time, #hud-speed, #hud-dv, #hud-burns, #hud-target {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -75,124 +75,58 @@ html, body {
   gap: 12px;
   padding: 20px;
   background: rgba(5, 6, 10, 0.82);
-  backdrop-filter: blur(2px);
   text-align: center;
   z-index: 10;
 }
 
-#message.hidden {
-  display: none;
-}
+#message.hidden { display: none; }
 
-#message h2 {
-  font-size: 22px;
-  color: #ffd76a;
-}
-
-#message p {
-  font-size: 14px;
-  color: #c8d2ea;
-  max-width: 320px;
-  line-height: 1.4;
-}
+#message h2 { font-size: 22px; color: #ffd76a; }
+#message p { font-size: 14px; color: #c8d2ea; max-width: 340px; line-height: 1.4; }
 
 #controls {
-  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
   background: #0d1224;
   border-top: 1px solid #1d2742;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .control-row {
   display: grid;
-  grid-template-columns: 76px 1fr 56px;
+  grid-template-columns: 62px 1fr 52px;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
-.control-row label {
-  color: #9fb0d6;
-}
-
-.control-row span {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-
-select {
-  font-family: inherit;
-  font-size: 13px;
-  color: #e8eefc;
-  background: #1d2742;
-  border: 1px solid #2a3350;
-  border-radius: 8px;
-  padding: 8px 10px;
-  width: 100%;
-}
+.control-row label { color: #9fb0d6; }
+.control-row span { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 32px;
+  height: 28px;
   background: transparent;
   touch-action: pan-y;
 }
 
 input[type="range"]::-webkit-slider-runnable-track {
-  height: 8px;
-  background: #1d2742;
-  border-radius: 4px;
+  height: 8px; background: #1d2742; border-radius: 4px;
 }
-
 input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 26px;
-  height: 26px;
-  margin-top: -9px;
-  border-radius: 50%;
-  background: #4ea1ff;
-  border: 2px solid #cfe3ff;
+  -webkit-appearance: none; appearance: none;
+  width: 24px; height: 24px; margin-top: -8px;
+  border-radius: 50%; background: #4ea1ff; border: 2px solid #cfe3ff;
 }
-
 input[type="range"]::-moz-range-track {
-  height: 8px;
-  background: #1d2742;
-  border-radius: 4px;
+  height: 8px; background: #1d2742; border-radius: 4px;
 }
-
 input[type="range"]::-moz-range-thumb {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: #4ea1ff;
-  border: 2px solid #cfe3ff;
-}
-
-.turn-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: flex-start;
-}
-
-.turn-row #angle-value {
-  min-width: 48px;
-  text-align: center;
-}
-
-.turn-btn {
-  font-size: 20px;
-  line-height: 1;
-  padding: 6px 14px;
-  min-height: 36px;
-  background: #2a3350;
-  color: #c8d2ea;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: #4ea1ff; border: 2px solid #cfe3ff;
 }
 
 .button-row {
@@ -203,124 +137,29 @@ input[type="range"]::-moz-range-thumb {
 
 button {
   font-family: inherit;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: #06101f;
   background: #4ea1ff;
   border: none;
   border-radius: 10px;
-  padding: 12px 8px;
-  min-height: 46px;
+  padding: 10px 8px;
+  min-height: 44px;
   cursor: pointer;
   touch-action: manipulation;
   transition: background 0.15s, transform 0.05s;
 }
+button:hover { background: #6fb4ff; }
+button:active { transform: scale(0.97); }
+button:disabled { background: #2a3350; color: #6c7796; cursor: default; }
 
-button:hover {
-  background: #6fb4ff;
-}
-
-button:active {
-  transform: scale(0.97);
-}
-
-button:disabled {
-  background: #2a3350;
-  color: #6c7796;
-  cursor: default;
-}
-
-#burn-btn {
-  background: #ff8c42;
-  color: #1a0d02;
-}
-
-#burn-btn:hover {
-  background: #ffa869;
-}
-
-#restart-btn {
-  background: #ffd76a;
-  padding: 12px 24px;
-}
-
-#reset-btn {
-  background: #2a3350;
-  color: #c8d2ea;
-}
-
-/* Сетка из трёх кнопок двигателей */
-.engines-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 6px;
-}
-
-.engine-btn {
-  font-size: 12px;
-  padding: 8px 4px;
-  min-height: 36px;
-  background: #2a3350;
-  color: #c8d2ea;
-  border: 1px solid #3b4a70;
-}
-
-.engine-btn.active {
-  background: #ff8c42;
-  color: #1a0d02;
-  border-color: #ff8c42;
-}
-
-/* НОВОЕ: панель масштабирования */
-#zoom-controls {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  z-index: 5;
-}
-
-#zoom-controls button {
-  width: 40px;
-  height: 40px;
-  min-height: 40px;
-  padding: 0;
-  font-size: 20px;
-  font-weight: 700;
-  border-radius: 8px;
-  background: rgba(29, 39, 66, 0.85);
-  color: #e8eefc;
-  border: 1px solid #3b4a70;
-}
-
-#zoom-controls button:hover {
-  background: rgba(78, 161, 255, 0.9);
-  color: #06101f;
-}
-
-#zoom-controls button:active {
-  transform: scale(0.95);
-}
+#restart-btn { background: #ffd76a; padding: 12px 24px; }
+#reset-btn { background: #2a3350; color: #c8d2ea; }
 
 @media (min-width: 720px) {
-  #hud {
-    font-size: 14px;
-    padding: 10px 20px;
-  }
-  .hud-item {
-    min-width: 90px;
-  }
-  #controls {
-    padding: 12px 20px;
-    gap: 10px;
-  }
-  .control-row {
-    grid-template-columns: 90px 1fr 64px;
-  }
-  .button-row {
-    grid-template-columns: 160px 160px 160px;
-    justify-content: center;
-  }
+  #hud { font-size: 14px; padding: 10px 20px; }
+  .hud-item { min-width: 80px; }
+  #controls { padding: 12px 20px; gap: 8px; }
+  .control-row { grid-template-columns: 70px 1fr 60px; }
+  .button-row { grid-template-columns: 160px 160px 160px; justify-content: center; }
 }
